@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.1",
   "scripts": {
-    "dev": "pnpm -r --parallel dev",
+    "dev": "pnpm -r --parallel dev & cloudflared tunnel run coding-agent",
     "build": "pnpm --filter @coding-agent/shared build && pnpm --filter @coding-agent/api build && pnpm --filter @coding-agent/web build",
     "lint": "pnpm -r lint",
     "check-types": "pnpm -r check-types",

@@ -300,14 +300,14 @@ This is the most infrastructure-heavy section. The Sandbox Manager handles the f
      SECRET_KEY_BASE=${process.env.DISTRU_SECRET_KEY_BASE}
      AWS_ACCESS_KEY_ID=${process.env.DISTRU_AWS_ACCESS_KEY_ID}
      AWS_SECRET_ACCESS_KEY=${process.env.DISTRU_AWS_SECRET_ACCESS_KEY}
-     AWS_REGION=${process.env.DISTRU_AWS_REGION}
-     S3_BUCKET=${process.env.DISTRU_S3_BUCKET}
-     STRIPE_SECRET_KEY=${process.env.DISTRU_STRIPE_SECRET_KEY}
-     STRIPE_PUBLISHABLE_KEY=${process.env.DISTRU_STRIPE_PUBLISHABLE_KEY}
-     SENDGRID_API_KEY=${process.env.DISTRU_SENDGRID_API_KEY}
+     ANTHROPIC_API_KEY=${process.env.DISTRU_ANTHROPIC_API_KEY}
+     OPENAI_API_KEY=${process.env.DISTRU_OPENAI_API_KEY}
+     COHERE_API_KEY=${process.env.DISTRU_COHERE_API_KEY}
+     GOOGLE_GEMINI_API_KEY=${process.env.DISTRU_GOOGLE_GEMINI_API_KEY}
+     CHARGEBEE_API_KEY=${process.env.DISTRU_CHARGEBEE_API_KEY}
+     GOOGLE_MAPS_API_KEY=${process.env.DISTRU_GOOGLE_MAPS_API_KEY}
      PORT={allocatedPort}
      MIX_ENV=dev
-     # Add any other vars engineers set in config/env/dev.env locally
      ```
   6a. Write `config/env/test.env` inside the worktree with the same base vars, but override `MIX_ENV=test` and `DATABASE_URL` to point at `distru_session_{sanitizedThreadId}_test` (Distru's test DB is separate from the dev DB). Do **not** set `PORT` or `REDIS_KEY_PREFIX` in the test env file — Distru manages those for test runs internally.
   7. Run `mix deps.get` and `yarn install --frozen-lockfile` inside the worktree (with a 10-min timeout each).
