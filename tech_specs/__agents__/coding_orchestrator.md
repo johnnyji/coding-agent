@@ -297,7 +297,7 @@ No blocking questions.
 
 This is the most infrastructure-heavy section. The Sandbox Manager handles the full lifecycle of a per-thread isolated environment.
 
-- [ ] In `apps/api`, create `src/sandbox/SandboxManager.ts`. It must export a singleton class `SandboxManager` with the following public methods:
+- [x] In `apps/api`, create `src/sandbox/SandboxManager.ts`. It must export a singleton class `SandboxManager` with the following public methods:
 
   **`async create(threadId: string, repoOwner: string, repoName: string, branch: string): Promise<SandboxInfo>`**
   1. Ensure a bare mirror of `github.com/{repoOwner}/{repoName}` exists at `$SANDBOX_MIRROR_PATH/{repoOwner}/{repoName}.git`. If not, run `git clone --mirror <repo-url> <path>`. If it does exist, run `git remote update` to fetch latest.
@@ -345,14 +345,14 @@ This is the most infrastructure-heavy section. The Sandbox Manager handles the f
   **`getSandboxInfo(threadId: string): SandboxInfo | null`**
   - Returns sandbox info from an in-memory Map if it exists.
 
-- [ ] Create `src/sandbox/runInSandbox.ts` — exports `runInSandbox(sandboxPath: string, command: string, timeoutMs?: number): Promise<{ stdout: string; stderr: string; exitCode: number }>`. This runs a shell command inside the worktree directory with the worktree's `.env` loaded, a timeout (default 15 min), and streams stdout/stderr to a callback.
+- [x] Create `src/sandbox/runInSandbox.ts` — exports `runInSandbox(sandboxPath: string, command: string, timeoutMs?: number): Promise<{ stdout: string; stderr: string; exitCode: number }>`. This runs a shell command inside the worktree directory with the worktree's `.env` loaded, a timeout (default 15 min), and streams stdout/stderr to a callback.
 
-- [ ] Create `src/sandbox/__tests__/SandboxManager.test.ts` with tests that mock `git` and `pg` calls and verify:
+- [x] Create `src/sandbox/__tests__/SandboxManager.test.ts` with tests that mock `git` and `pg` calls and verify:
   - Port allocation is unique across concurrent calls.
   - `destroy` frees the port back to the pool.
   - Sanitized thread IDs produce valid Postgres DB names.
 
-- [ ] Add a `SandboxManager` idle timeout: if a sandbox has had no activity for 4 hours (tracked by `lastActivityAt` in the Map), call `destroy` automatically. Use a `setInterval` check every 30 minutes.
+- [x] Add a `SandboxManager` idle timeout: if a sandbox has had no activity for 4 hours (tracked by `lastActivityAt` in the Map), call `destroy` automatically. Use a `setInterval` check every 30 minutes.
 
 #### Post Changes Checklist
 
@@ -364,11 +364,15 @@ This is the most infrastructure-heavy section. The Sandbox Manager handles the f
 
 #### Completed
 
-*(blank)*
+- Created `apps/api/src/sandbox/SandboxManager.ts` exporting the `SandboxManager` class and a singleton `sandboxManager`. The class manages the full sandbox lifecycle: git mirror + worktree creation, port allocation from an in-memory pool (`SANDBOX_PORT_RANGE_START`–`SANDBOX_PORT_RANGE_END`), per-session Postgres DB creation (`distru_session_{sanitizedId}` + `_test`), `config/env/dev.env` + `config/env/test.env` writes (with all `DISTRU_*` env vars mapped appropriately), `mix deps.get` + `yarn install` + `mix ecto.setup`, and full teardown in `destroy` (PID/port kill, worktree remove, DB drop, filesystem cleanup). Idle timeout (4-hour inactivity) is checked every 30 minutes via `setInterval` (unref'd to not block process exit). Added `setDevServerPid` and `updateActivity` methods per Section 9's requirements.
+- Exported `sanitizeThreadId(threadId: string): string` — replaces non-alphanumeric chars with underscores, prefixes numeric-starting IDs with `s_`, truncates to 50 chars.
+- Created `apps/api/src/sandbox/runInSandbox.ts` exporting `runInSandbox(sandboxPath, command, timeoutMs?)`. Loads `config/env/dev.env` from the worktree and merges it into the child process env. Uses `spawn('sh', ['-c', command])` with a configurable timeout (default 15 min) and collects stdout/stderr into the resolved `{ stdout, stderr, exitCode }`.
+- Created `apps/api/src/sandbox/__tests__/SandboxManager.test.ts` with 12 tests covering: `sanitizeThreadId` correctness (hyphens, spaces, leading digits, length, Postgres-validity), concurrent port uniqueness via `Promise.all`, port release after `destroy`, `getSandboxInfo` nullability, `create` output field correctness (dbName, redisPrefix, sandboxPath), destroy no-op for unknown threadId, and `setDevServerPid` reflection.
+- All checklist commands pass: `pnpm -r build` ✓, `pnpm -r lint` ✓, `pnpm -r check-types` ✓, `pnpm -r test` ✓ (19 tests total: 12 new + 7 prior).
 
 #### Blocking Questions
 
-*(blank)*
+No blocking questions.
 
 ---
 
