@@ -32,6 +32,7 @@ API Service (Hono, Railway)
   │     ├── delegateNode      → Claude API call
   │     ├── implementNode     → Claude Code subprocess
   │     ├── bugFixNode        → Claude Code subprocess
+  │     ├── postCleanupNode   → Claude Code subprocess
   │     ├── qaNode            → Claude Code subprocess (Playwright MCP)
   │     ├── askUserNode       → LangGraph interrupt()
   │     └── openPrNode        → GitHub REST API
@@ -250,15 +251,15 @@ No blocking questions.
 
 #### Asks
 
-- [ ] In `apps/web`, install: `next-auth@beta`, `@octokit/rest`, `@octokit/auth-app`.
-- [ ] In `apps/api`, install: `@octokit/rest`, `@octokit/auth-app`.
-- [ ] Configure NextAuth in `apps/web/src/app/api/auth/[...nextauth]/route.ts` with the GitHub provider. Store the user's GitHub `access_token` in the session. Use Postgres as the session adapter (install `@auth/pg-adapter`).
-- [ ] Create `apps/web/src/app/api/repos/route.ts` — a `GET` handler that uses the user's GitHub access token to list their accessible repos (via Octokit `repos.listForAuthenticatedUser`). Return `{ repos: [{ owner, name, fullName, private }] }`.
-- [ ] In `apps/api`, create `src/github/appClient.ts` — exports `getInstallationOctokit(repoOwner: string, repoName: string)` which authenticates as the GitHub App for the given repo installation. This is used by the Open PR node for bot-authored actions.
-- [ ] Create `apps/web/src/components/RepoSelector.tsx` — a dropdown that fetches from `/api/repos` and lets the user pick a repo. On select, stores `{ repoOwner, repoName }` in component state and passes it up to the parent page.
-- [ ] Create `apps/web/src/app/page.tsx` — renders the `RepoSelector`. Once a repo is selected, renders the chat UI (placeholder for now — a `<div>Chat goes here</div>`). If the user is not signed in, redirect to the sign-in page.
-- [ ] Protect the page with NextAuth's `getServerSession` — unauthenticated users see a "Sign in with GitHub" button.
-- [ ] Write a test in `apps/api/src/github/__tests__/appClient.test.ts` that mocks Octokit and verifies `getInstallationOctokit` constructs the auth correctly.
+- [x] In `apps/web`, install: `next-auth@beta`, `@octokit/rest`, `@octokit/auth-app`.
+- [x] In `apps/api`, install: `@octokit/rest`, `@octokit/auth-app`.
+- [x] Configure NextAuth in `apps/web/src/app/api/auth/[...nextauth]/route.ts` with the GitHub provider. Store the user's GitHub `access_token` in the session. Use Postgres as the session adapter (install `@auth/pg-adapter`).
+- [x] Create `apps/web/src/app/api/repos/route.ts` — a `GET` handler that uses the user's GitHub access token to list their accessible repos (via Octokit `repos.listForAuthenticatedUser`). Return `{ repos: [{ owner, name, fullName, private }] }`.
+- [x] In `apps/api`, create `src/github/appClient.ts` — exports `getInstallationOctokit(repoOwner: string, repoName: string)` which authenticates as the GitHub App for the given repo installation. This is used by the Open PR node for bot-authored actions.
+- [x] Create `apps/web/src/components/RepoSelector.tsx` — a dropdown that fetches from `/api/repos` and lets the user pick a repo. On select, stores `{ repoOwner, repoName }` in component state and passes it up to the parent page.
+- [x] Create `apps/web/src/app/page.tsx` — renders the `RepoSelector`. Once a repo is selected, renders the chat UI (placeholder for now — a `<div>Chat goes here</div>`). If the user is not signed in, redirect to the sign-in page.
+- [x] Protect the page with NextAuth's `getServerSession` — unauthenticated users see a "Sign in with GitHub" button.
+- [x] Write a test in `apps/api/src/github/__tests__/appClient.test.ts` that mocks Octokit and verifies `getInstallationOctokit` constructs the auth correctly.
 
 #### Post Changes Checklist
 
@@ -270,11 +271,23 @@ No blocking questions.
 
 #### Completed
 
-*(blank)*
+- Installed `next-auth@beta` (Auth.js v5), `@octokit/rest`, `@octokit/auth-app`, `@auth/pg-adapter`, `pg`, and `@types/pg` in `apps/web`. Installed `@octokit/rest` and `@octokit/auth-app` in `apps/api`.
+- Created `apps/api/src/db/migrations/002_auth.sql` with the Auth.js required tables (`users`, `accounts`, `sessions`, `verification_token`). The mixed camelCase/snake_case column names are intentional — `@auth/pg-adapter` uses quoted identifiers for camelCase columns, which Postgres preserves exactly.
+- Created `apps/web/src/auth.ts` with NextAuth (Auth.js v5) configured for GitHub OAuth, using the `@auth/pg-adapter` Postgres adapter (shared `DATABASE_URL`). The GitHub access token is stored in the `accounts` table and surfaced in the session via a `session` callback that queries `accounts` by `userId`.
+- Created `apps/web/src/app/api/auth/[...nextauth]/route.ts` exporting `GET` and `POST` from Auth.js handlers.
+- Created `apps/web/src/app/api/repos/route.ts` — `GET` handler using the session access token with Octokit to call `repos.listForAuthenticatedUser` and return `{ repos: [{ owner, name, fullName, private }] }`.
+- Created `apps/api/src/github/appClient.ts` exporting `getInstallationOctokit(repoOwner, repoName)` — creates an app-level Octokit to look up the installation ID, then returns an installation-level Octokit authenticated as the GitHub App.
+- Created `apps/web/src/components/RepoSelector.tsx` — client component that fetches `/api/repos` on mount and renders a `<select>` dropdown. On selection calls `onSelect({ repoOwner, repoName })`.
+- Created `apps/web/src/components/HomeContent.tsx` — client component that manages `selectedRepo` state, renders `RepoSelector`, and conditionally renders `<div>Chat goes here</div>` once a repo is selected.
+- Updated `apps/web/src/app/page.tsx` — server component that calls `auth()` (Auth.js v5 equivalent of `getServerSession`). Unauthenticated users see a "Sign in with GitHub" form using a server action; authenticated users see `<HomeContent />`.
+- Wrote 4 tests in `apps/api/src/github/__tests__/appClient.test.ts` verifying that `getInstallationOctokit` constructs both the app-level and installation-level Octokit with the correct credentials and installation ID.
+- All checklist commands pass: `pnpm -r build` ✓, `pnpm -r lint` ✓, `pnpm -r check-types` ✓, `pnpm -r test` ✓ (7 tests total).
+
+Note: Auth.js v5 uses `auth()` instead of the v4 `getServerSession()` — same intent, different API. The spec referenced `getServerSession` but the installed `next-auth@beta` is v5 so `auth()` is the correct equivalent.
 
 #### Blocking Questions
 
-*(blank)*
+No blocking questions.
 
 ---
 
@@ -365,7 +378,7 @@ This is the most infrastructure-heavy section. The Sandbox Manager handles the f
 
 - [ ] In `apps/api`, install: `@langchain/langgraph`, `@langchain/core`.
 - [ ] Create `src/graph/state.ts` — defines the LangGraph `Annotation` object from `OrchestratorState` (imported from `packages/shared`). Use `Annotation.Root({...})` with appropriate reducers (messages use `messagesStateReducer`, most other fields use last-write-wins).
-- [ ] Create `src/graph/nodes/` directory with one stub file per node: `techSpec.ts`, `delegate.ts`, `implement.ts`, `bugFix.ts`, `qa.ts`, `askUser.ts`, `openPr.ts`. Each stub must:
+- [ ] Create `src/graph/nodes/` directory with one stub file per node: `techSpec.ts`, `delegate.ts`, `implement.ts`, `bugFix.ts`, `postCleanup.ts`, `qa.ts`, `askUser.ts`, `openPr.ts`. Each stub must:
   - Export an async function matching `(state: typeof GraphState.State) => Partial<typeof GraphState.State>`.
   - Log `"[nodeName] called"` and return the state unchanged.
 - [ ] Create `src/graph/router.ts` — exports `routeFromDelegate(state): string` that maps `state.delegationDecision` to a node name:
@@ -382,11 +395,12 @@ This is the most infrastructure-heavy section. The Sandbox Manager handles the f
   ```
   START → techSpec → delegate
   delegate --[routeFromDelegate]-→ implement | bugFix | qa | askUser | openPr
-  implement → delegate
-  bugFix    → delegate
-  qa        → delegate
-  askUser   → delegate
-  openPr    → END
+  implement   → postCleanup
+  bugFix      → postCleanup
+  postCleanup → delegate
+  qa          → delegate
+  askUser     → delegate
+  openPr      → END
   ```
   Wire up the Postgres checkpointer from Section 2.
 - [ ] Create `src/graph/run.ts` — exports `startThread(input: StartInput): Promise<string>` (returns `threadId`) and `resumeThread(threadId: string, userMessage: string): Promise<void>`. Both invoke the compiled graph with the appropriate config (`{ configurable: { thread_id: threadId } }`).
@@ -539,7 +553,71 @@ Both nodes follow the same Claude Code subprocess pattern; they differ only in t
 
 - [ ] Both nodes should handle Claude Code process failures (non-zero exit, timeout) by appending an error message to `state.messages` and setting `state.delegationDecision = null` so the delegate node re-evaluates.
 
+- [ ] Neither node returns directly to `delegate`. After completing (success or failure), the graph routes to `postCleanup` (Section 8.5), which handles all post-commit cleanup before returning to `delegate`.
+
 - [ ] Write tests in `src/graph/nodes/__tests__/implement.test.ts` and `bugFix.test.ts` that mock `query` and verify state updates.
+
+#### Post Changes Checklist
+
+1. No GQL schema changes — check complete.
+2. Run `pnpm -r build` (fix any build errors).
+3. Run `pnpm -r lint` (fix any errors).
+4. Run `pnpm -r check-types` (fix any type errors).
+5. Run `pnpm -r test` (fix failing tests).
+
+#### Completed
+
+*(blank)*
+
+#### Blocking Questions
+
+*(blank)*
+
+---
+
+### Section 8.5: Post-Implementation Cleanup Agent Node
+
+#### Asks
+
+This node runs automatically after every `implement` or `bugFix` commit. It detects what types of files changed, runs Distru-specific cleanup commands, fixes any issues that arise, amends the previous commit with any cleanup changes, and updates the tech spec — then hands control back to `delegate`.
+
+- [ ] Implement `src/graph/nodes/postCleanup.ts`. This node must:
+  1. Run `git diff --name-only HEAD~1 HEAD` inside the sandbox via `runInSandbox` to get the list of files changed by the last commit.
+  2. Derive which cleanup categories apply from that file list:
+     - **FE changes**: any `.js`, `.ts`, `.tsx`, `.jsx`, `.css`, `.scss`, files under `assets/`, or `package.json` / `yarn.lock` changed.
+     - **BE changes**: any `.ex`, `.exs`, or `mix.exs` changed.
+     - **GQL schema changes**: any `.graphql`, `.gql`, or `*_types.ex` files changed.
+     - **DB changes**: any files under `priv/repo/migrations/` changed.
+  3. Build the cleanup prompt (see `src/graph/prompts/postCleanup.ts`), passing the detected categories and the changed file list.
+  4. Invoke Claude Code via `query()` with `cwd: state.sandboxPath`, `dangerouslySkipPermissions: true`, `maxTurns: 40`.
+  5. Stream output and accumulate into `lastAgentOutput`.
+  6. After Claude Code finishes, re-read the tech spec file from disk and update `state.techSpecContent`.
+  7. Return updated state.
+
+- [ ] Create `src/graph/prompts/postCleanup.ts`. The prompt must instruct Claude Code to:
+  1. **If FE changes detected**: run `make fix-js`. If it exits non-zero, read the output, fix the issues, and re-run until it passes.
+  2. **If BE changes detected**: run `mix format`. If it exits non-zero, fix the issues and re-run until it passes.
+  3. **If GQL schema changes detected**: run `mix dump_graphql_schema`. If it exits non-zero, fix the issues and re-run until it passes.
+  4. **If FE changes detected**: run `yarn check-types`. If it exits non-zero, read the TypeScript errors, fix them, and re-run until it passes.
+  5. **Always**: run `git status` and inspect any untracked or modified files not currently in `.gitignore`. If newly generated files (e.g. auto-generated schema dumps, compiled artifacts) appear that should not be committed, add them to `.gitignore`.
+  6. **If DB changes detected**: run the following commands in sequence to restore and re-migrate the test database:
+     ```
+     git restore --source=develop priv/repo/structure.sql
+     MIX_ENV=test mix ecto.drop
+     MIX_ENV=test mix ecto.create
+     MIX_ENV=test mix ecto.load
+     MIX_ENV=test mix ecto.migrate
+     MIX_ENV=test mix run priv/repo/seeds.exs
+     ```
+     If any command fails, read the error output, fix the underlying issue, and re-run the full sequence from the top.
+  7. After all cleanup commands pass: run `git status`. If there are any uncommitted changes (formatted files, schema dumps, `.gitignore` updates, or bug fixes from the above steps), stage them all and **amend the previous commit** with `git commit --amend --no-edit`. Do not create a new commit.
+  8. Update the tech spec file: in the **Completed** block of the most recently implemented section, append a note that post-implementation cleanup ran and describe what was fixed or changed (if anything). Do not check off Asks or modify other sections.
+  9. Never stop early. Run every applicable command for all detected categories before finishing.
+
+- [ ] Write tests in `src/graph/nodes/__tests__/postCleanup.test.ts` that mock `runInSandbox` and `query`. Verify:
+  - Correct cleanup categories are derived from changed file paths (FE, BE, GQL, DB all detected independently).
+  - When no applicable categories are detected, Claude Code is still invoked (for the `.gitignore` check).
+  - State fields `techSpecContent` and `lastAgentOutput` are updated after the node runs.
 
 #### Post Changes Checklist
 

@@ -11,7 +11,7 @@ vi.mock('../client.js', () => ({
 vi.mock('fs/promises', () => ({
   readdir: vi.fn().mockResolvedValue(['001_sessions.sql']),
   readFile: vi.fn().mockResolvedValue(
-    'CREATE TABLE IF NOT EXISTS orchestrator_sessions (thread_id TEXT PRIMARY KEY);',
+    'CREATE TABLE IF NOT EXISTS orchestrator_sessions ("threadId" TEXT PRIMARY KEY);',
   ),
 }))
 
