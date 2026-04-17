@@ -548,7 +548,7 @@ No blocking questions.
 
 Both nodes follow the same Claude Code subprocess pattern; they differ only in their prompt.
 
-- [ ] Implement `src/graph/nodes/implement.ts`. This node must:
+- [x] Implement `src/graph/nodes/implement.ts`. This node must:
   1. Read `state.techSpecContent` (already fresh from the delegate node).
   2. Build the implementation prompt (see `src/graph/prompts/implement.ts`).
   3. Invoke Claude Code via `query()` with `cwd: state.sandboxPath`, `dangerouslySkipPermissions: true`, `maxTurns: 80`.
@@ -557,26 +557,26 @@ Both nodes follow the same Claude Code subprocess pattern; they differ only in t
   6. Append a summary message to `state.messages`.
   7. Return updated state.
 
-- [ ] Create `src/graph/prompts/implement.ts` with the following prompt structure:
+- [x] Create `src/graph/prompts/implement.ts` with the following prompt structure:
   - You are a senior engineer implementing one section of a tech spec in the cloned worktree (all paths are relative to that repo, never the orchestrator repo).
   - Read `docs/tech_spec/__AI_TEMPLATE__.md` for instructions on how to work with this spec.
   - The full current spec content is included (for caching).
   - Follow the HARD STOP RULE: implement exactly one section, update the spec file (Completed + Blocking Questions), commit changes, then stop.
   - Commit message format: `feat(<section-slug>): <one-line description>`.
 
-- [ ] Implement `src/graph/nodes/bugFix.ts`. Same structure as `implement.ts` but uses a different prompt.
+- [x] Implement `src/graph/nodes/bugFix.ts`. Same structure as `implement.ts` but uses a different prompt.
 
-- [ ] Create `src/graph/prompts/bugFix.ts`:
+- [x] Create `src/graph/prompts/bugFix.ts`:
   - You are a senior engineer fixing bugs found during QA.
   - The Bugs section of the tech spec lists what was found.
   - Fix the bugs, update the Bugs section marking them resolved, commit changes.
   - Commit message format: `fix: <description>`.
 
-- [ ] Both nodes should handle Claude Code process failures (non-zero exit, timeout) by appending an error message to `state.messages` and setting `state.delegationDecision = null` so the delegate node re-evaluates.
+- [x] Both nodes should handle Claude Code process failures (non-zero exit, timeout) by appending an error message to `state.messages` and setting `state.delegationDecision = null` so the delegate node re-evaluates.
 
-- [ ] Neither node returns directly to `delegate`. After completing (success or failure), the graph routes to `postCleanup` (Section 8.5), which handles all post-commit cleanup before returning to `delegate`.
+- [x] Neither node returns directly to `delegate`. After completing (success or failure), the graph routes to `postCleanup` (Section 8.5), which handles all post-commit cleanup before returning to `delegate`.
 
-- [ ] Write tests in `src/graph/nodes/__tests__/implement.test.ts` and `bugFix.test.ts` that mock `query` and verify state updates.
+- [x] Write tests in `src/graph/nodes/__tests__/implement.test.ts` and `bugFix.test.ts` that mock `query` and verify state updates.
 
 #### Post Changes Checklist
 
@@ -588,11 +588,16 @@ Both nodes follow the same Claude Code subprocess pattern; they differ only in t
 
 #### Completed
 
-*(blank)*
+- Created `apps/api/src/graph/prompts/implement.ts` — `buildImplementPrompt({ techSpecContent, sandboxPath })` instructs the agent to implement exactly one spec section, commit with `feat(<section-slug>): ...`, and stop.
+- Created `apps/api/src/graph/prompts/bugFix.ts` — `buildBugFixPrompt({ techSpecContent })` instructs the agent to fix bugs from the Bugs section, mark them resolved, and commit with `fix: ...`.
+- Implemented `apps/api/src/graph/nodes/implement.ts`: reads fresh `techSpecContent`, builds prompt, calls `query()` with `allowDangerouslySkipPermissions: true` + `maxTurns: 80`, streams output into `lastAgentOutput`, re-reads spec from disk, appends summary `AIMessage`. On failure, sets `delegationDecision: null` and appends error `AIMessage`.
+- Implemented `apps/api/src/graph/nodes/bugFix.ts`: identical structure to implement.ts, using `buildBugFixPrompt`.
+- Wrote 5 tests in `apps/api/src/graph/nodes/__tests__/implement.test.ts` and 5 tests in `bugFix.test.ts` covering: output accumulation, spec re-read, summary message, correct query options, and error path.
+- All checklist commands pass: `pnpm -r build` ✓, `pnpm -r lint` ✓, `pnpm -r check-types` ✓, `pnpm -r test` ✓ (53 tests total: 10 new + 43 prior).
 
 #### Blocking Questions
 
-*(blank)*
+No blocking questions.
 
 ---
 
