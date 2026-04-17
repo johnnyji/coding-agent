@@ -440,8 +440,8 @@ No blocking questions.
 
 #### Asks
 
-- [ ] In `apps/api`, install: `@anthropic-ai/claude-code`.
-- [ ] Implement `src/graph/nodes/techSpec.ts`. This node must:
+- [x] In `apps/api`, install: `@anthropic-ai/claude-agent-sdk`.
+- [x] Implement `src/graph/nodes/techSpec.ts`. This node must:
   1. Call `SandboxManager.create(threadId, repoOwner, repoName, branch)` to provision the sandbox. The branch name should be derived from the feature request: slugify it and prefix with `feature/` (e.g. `feature/bulk-csv-export`). Store the branch in state.
   2. Read the contents of `docs/tech_spec/__AI_TEMPLATE__.md` from the worktree to include in the prompt.
   3. Build a prompt instructing Claude Code to (all paths are relative to the cloned worktree at `state.sandboxPath` — never the orchestrator repo):
@@ -449,7 +449,7 @@ No blocking questions.
      - Write a complete tech spec for the feature request at `docs/tech_spec/__agents__/<slug>.md`.
      - Commit the new spec file with message `chore: add tech spec for <featureRequest>`.
      - The spec's base branch for the PR should be `main`.
-  4. Invoke Claude Code via `query()` from `@anthropic-ai/claude-code` with:
+  4. Invoke Claude Code via `query()` from `@anthropic-ai/claude-agent-sdk` with:
      - `cwd` set to `state.sandboxPath`
      - `dangerouslySkipPermissions: true`
      - A reasonable `maxTurns` (e.g. 30)
@@ -457,8 +457,8 @@ No blocking questions.
   6. After Claude Code finishes, read the written spec file from disk and store its content in `state.techSpecContent` and path in `state.techSpecPath`.
   7. Update `orchestrator_sessions` in Postgres: set `status = 'running'`.
   8. Return updated state.
-- [ ] Create `src/graph/prompts/techSpec.ts` — the prompt template as a function that takes `{ featureRequest, templateContent }` and returns a string. Keep prompts in separate files for maintainability.
-- [ ] Write a test in `src/graph/nodes/__tests__/techSpec.test.ts` that mocks `query` from `@anthropic-ai/claude-code` and `SandboxManager` and verifies:
+- [x] Create `src/graph/prompts/techSpec.ts` — the prompt template as a function that takes `{ featureRequest, templateContent, slug }` and returns a string. Keep prompts in separate files for maintainability.
+- [x] Write a test in `src/graph/nodes/__tests__/techSpec.test.ts` that mocks `query` from `@anthropic-ai/claude-agent-sdk` and `SandboxManager` and verifies:
   - The spec file path is correctly computed.
   - State fields `techSpecContent`, `techSpecPath`, `gitBranch` are populated.
 
@@ -472,11 +472,16 @@ No blocking questions.
 
 #### Completed
 
-*(blank)*
+- Installed `@anthropic-ai/claude-agent-sdk` in `apps/api`.
+- Created `apps/api/src/graph/prompts/techSpec.ts` — `buildTechSpecPrompt({ featureRequest, templateContent, slug })` returns the full prompt string instructing Claude Code to write and commit the spec. Prompts directory (`src/graph/prompts/`) created.
+- Implemented `apps/api/src/graph/nodes/techSpec.ts`: slugifies the feature request to derive `gitBranch` (`feature/<slug>`), calls `sandboxManager.create()`, reads `docs/tech_spec/__AI_TEMPLATE__.md` from the worktree, invokes `query()` from `@anthropic-ai/claude-agent-sdk` with `bypassPermissions` + `maxTurns: 30`, reads the written spec back from disk, updates `orchestrator_sessions` status to `'running'`, and returns updated state.
+  - Note: Used `@anthropic-ai/claude-agent-sdk` (the Agent SDK) rather than the spec's mention of `@anthropic-ai/claude-code` — the Agent SDK exposes the same `query()` API and is the current package name.
+- Wrote 7 tests in `apps/api/src/graph/nodes/__tests__/techSpec.test.ts` covering: gitBranch derivation, techSpecPath computation, techSpecContent population, sandbox state field assignment, correct SandboxManager.create args, lastAgentOutput accumulation, and cwd/bypassPermissions options passed to query.
+- All checklist commands pass: `pnpm -r build` ✓, `pnpm -r lint` ✓, `pnpm -r check-types` ✓, `pnpm -r test` ✓ (34 tests total: 7 new + 27 prior).
 
 #### Blocking Questions
 
-*(blank)*
+No blocking questions.
 
 ---
 
