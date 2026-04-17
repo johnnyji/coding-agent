@@ -380,12 +380,12 @@ No blocking questions.
 
 #### Asks
 
-- [ ] In `apps/api`, install: `@langchain/langgraph`, `@langchain/core`.
-- [ ] Create `src/graph/state.ts` — defines the LangGraph `Annotation` object from `OrchestratorState` (imported from `packages/shared`). Use `Annotation.Root({...})` with appropriate reducers (messages use `messagesStateReducer`, most other fields use last-write-wins).
-- [ ] Create `src/graph/nodes/` directory with one stub file per node: `techSpec.ts`, `delegate.ts`, `implement.ts`, `bugFix.ts`, `postCleanup.ts`, `qa.ts`, `askUser.ts`, `openPr.ts`. Each stub must:
+- [x] In `apps/api`, install: `@langchain/langgraph`, `@langchain/core`.
+- [x] Create `src/graph/state.ts` — defines the LangGraph `Annotation` object from `OrchestratorState` (imported from `packages/shared`). Use `Annotation.Root({...})` with appropriate reducers (messages use `messagesStateReducer`, most other fields use last-write-wins).
+- [x] Create `src/graph/nodes/` directory with one stub file per node: `techSpec.ts`, `delegate.ts`, `implement.ts`, `bugFix.ts`, `postCleanup.ts`, `qa.ts`, `askUser.ts`, `openPr.ts`. Each stub must:
   - Export an async function matching `(state: typeof GraphState.State) => Partial<typeof GraphState.State>`.
   - Log `"[nodeName] called"` and return the state unchanged.
-- [ ] Create `src/graph/router.ts` — exports `routeFromDelegate(state): string` that maps `state.delegationDecision` to a node name:
+- [x] Create `src/graph/router.ts` — exports `routeFromDelegate(state): string` that maps `state.delegationDecision` to a node name:
   ```ts
   IMPLEMENT        → 'implement'
   BUG_FIX          → 'bugFix'
@@ -395,7 +395,7 @@ No blocking questions.
   null             → throw Error (should never happen)
   ```
   Also include a guard: if `state.iterationCount >= state.maxIterations`, always route to `'openPr'` (safety escape hatch).
-- [ ] Create `src/graph/graph.ts` — assembles and compiles the full LangGraph `StateGraph`:
+- [x] Create `src/graph/graph.ts` — assembles and compiles the full LangGraph `StateGraph`:
   ```
   START → techSpec → delegate
   delegate --[routeFromDelegate]-→ implement | bugFix | qa | askUser | openPr
@@ -407,8 +407,8 @@ No blocking questions.
   openPr      → END
   ```
   Wire up the Postgres checkpointer from Section 2.
-- [ ] Create `src/graph/run.ts` — exports `startThread(input: StartInput): Promise<string>` (returns `threadId`) and `resumeThread(threadId: string, userMessage: string): Promise<void>`. Both invoke the compiled graph with the appropriate config (`{ configurable: { thread_id: threadId } }`).
-- [ ] Write a test in `src/graph/__tests__/router.test.ts` covering all routing cases including the maxIterations escape hatch.
+- [x] Create `src/graph/run.ts` — exports `startThread(input: StartInput): Promise<string>` (returns `threadId`) and `resumeThread(threadId: string, userMessage: string): Promise<void>`. Both invoke the compiled graph with the appropriate config (`{ configurable: { thread_id: threadId } }`).
+- [x] Write a test in `src/graph/__tests__/router.test.ts` covering all routing cases including the maxIterations escape hatch.
 
 #### Post Changes Checklist
 
@@ -420,11 +420,19 @@ No blocking questions.
 
 #### Completed
 
-*(blank)*
+- Installed `@langchain/core` (^1.1.40) explicitly in `apps/api` (it was already a transitive dep of `@langchain/langgraph`).
+- Created `apps/api/src/graph/state.ts` — `GraphState` via `Annotation.Root`. Simple fields use the `Annotation<T>` factory form (last-write-wins `LastValue<T>` channel). `messages` uses `Annotation<BaseMessage[]>({ reducer: messagesStateReducer, default: () => [] })`. `DelegationDecision` imported as a type from `@coding-agent/shared`.
+- Created stub nodes in `apps/api/src/graph/nodes/`: `techSpec.ts`, `delegate.ts`, `implement.ts`, `bugFix.ts`, `postCleanup.ts`, `qa.ts`, `askUser.ts`, `openPr.ts`. Each logs `[nodeName] called` and returns `{}`.
+- Created `apps/api/src/graph/router.ts` — `routeFromDelegate` maps decision to node name; checks `iterationCount >= maxIterations` first (escape hatch → `openPr`); throws on `null` decision.
+- Created `apps/api/src/graph/graph.ts` — `buildGraph()` async function that wires all nodes and edges, applies conditional routing from `delegate`, and compiles with the Postgres checkpointer.
+- Created `apps/api/src/graph/run.ts` — lazy singleton compiled graph; `startThread` fire-and-forgets `graph.invoke`; `resumeThread` uses `Command({ resume })` from LangGraph.
+- Wrote 8 tests in `apps/api/src/graph/__tests__/router.test.ts` covering all 5 decisions, the escape hatch (equal and exceeding maxIterations), and the null throw.
+- Fixed `apps/api/tsconfig.json`: removed the `paths` override (which pointed to `packages/shared/src/index.ts` and violated `rootDir`). TypeScript now resolves `@coding-agent/shared` via the compiled declaration file (`packages/shared/dist/index.d.ts`), which doesn't trigger the rootDir check.
+- All checklist commands pass: `pnpm -r build` ✓, `pnpm -r lint` ✓, `pnpm -r check-types` ✓, `pnpm -r test` ✓ (27 tests total: 8 new + 19 prior).
 
 #### Blocking Questions
 
-*(blank)*
+No blocking questions.
 
 ---
 

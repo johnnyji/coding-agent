@@ -13,6 +13,7 @@
   "dependencies": {
     "@coding-agent/shared": "workspace:*",
     "@hono/node-server": "^1.12.0",
+    "@langchain/core": "^1.1.40",
     "@langchain/langgraph": "^1.2.8",
     "@langchain/langgraph-checkpoint-postgres": "^1.0.1",
     "@octokit/auth-app": "^8.2.0",

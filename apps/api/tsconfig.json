@@ -7,10 +7,7 @@
     "outDir": "./dist",
     "rootDir": "./src",
     "skipLibCheck": true,
-    "esModuleInterop": true,
-    "paths": {
-      "@coding-agent/shared": ["../../packages/shared/src/index.ts"]
-    }
+    "esModuleInterop": true
   },
   "include": ["src"]
 }
