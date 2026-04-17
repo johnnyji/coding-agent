@@ -491,8 +491,8 @@ No blocking questions.
 
 The delegation agent is a lightweight Claude API call (not Claude Code) that reads the current tech spec and returns a structured decision. It uses prompt caching since the tech spec content is large and repeated on every loop iteration.
 
-- [ ] In `apps/api`, install: `@langchain/anthropic`, `zod`.
-- [ ] Implement `src/graph/nodes/delegate.ts`. This node must:
+- [x] In `apps/api`, install: `@langchain/anthropic`, `zod`.
+- [x] Implement `src/graph/nodes/delegate.ts`. This node must:
   1. Re-read the tech spec file from disk (so it always has the latest content after an agent edits it). Update `state.techSpecContent`.
   2. Call the Anthropic API (via `@langchain/anthropic` `ChatAnthropic`) with:
      - Model: `claude-sonnet-4-6` (or latest available)
@@ -511,14 +511,14 @@ The delegation agent is a lightweight Claude API call (not Claude Code) that rea
   5. Increment `state.iterationCount`.
   6. Append the delegation reasoning to `state.messages` as an assistant message (so it appears in the chat UI).
   7. Return updated state.
-- [ ] Create `src/graph/prompts/delegate.ts` — the system prompt explaining:
+- [x] Create `src/graph/prompts/delegate.ts` — the system prompt explaining:
   - Scan the tech spec for the first section with incomplete Asks (unchecked `- [ ]` items).
   - If incomplete Asks remain → `IMPLEMENT`.
   - If all Asks complete but QA Checklist is empty → `QA`.
   - If QA found bugs (Bugs section is non-empty and not all resolved) → `BUG_FIX`.
   - If QA passed cleanly → `FINISH`.
   - If any Blocking Questions are unanswered → `ASK_USER_QUESTION`.
-- [ ] Write tests in `src/graph/nodes/__tests__/delegate.test.ts` that mock `ChatAnthropic` and verify all 5 decision paths.
+- [x] Write tests in `src/graph/nodes/__tests__/delegate.test.ts` that mock `ChatAnthropic` and verify all 5 decision paths.
 
 #### Post Changes Checklist
 
@@ -530,11 +530,15 @@ The delegation agent is a lightweight Claude API call (not Claude Code) that rea
 
 #### Completed
 
-*(blank)*
+- Installed `@langchain/anthropic` (^1.3.26) and `zod` (^4.3.6) in `apps/api`.
+- Created `apps/api/src/graph/prompts/delegate.ts` — `buildDelegateSystemPrompt()` returns a system prompt that instructs the model to scan the tech spec and apply a priority-ordered decision tree: ASK_USER_QUESTION → BUG_FIX → IMPLEMENT → QA → FINISH.
+- Implemented `apps/api/src/graph/nodes/delegate.ts`: re-reads the spec from disk, creates a `ChatAnthropic` instance (model: `claude-sonnet-4-6`), calls `withStructuredOutput(DelegationSchema)` with a Zod v4 schema, invokes with `cache_control: { type: 'ephemeral' }` on the tech spec user message, stores `delegationDecision` + `userQuestion`, increments `iterationCount`, and appends a summary AIMessage to state.
+- Wrote 9 tests in `apps/api/src/graph/nodes/__tests__/delegate.test.ts` covering all 5 decision paths, `iterationCount` increment, spec re-read + `techSpecContent` update, message append, and `userQuestion` null-coercion.
+- All checklist commands pass: `pnpm -r build` ✓, `pnpm -r lint` ✓, `pnpm -r check-types` ✓, `pnpm -r test` ✓ (43 tests total: 9 new + 34 prior).
 
 #### Blocking Questions
 
-*(blank)*
+No blocking questions.
 
 ---
 
