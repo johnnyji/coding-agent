@@ -877,9 +877,9 @@ No blocking questions.
 
 #### Asks
 
-- [ ] In `apps/web`, install: `ai`, `@ai-sdk/react`, `eventsource-parser`. Also initialize shadcn/ui (`npx shadcn@latest init`) and Tailwind CSS 4 if not already present — these are required by ai-elements.
-- [ ] Add ai-elements components via the CLI (these are copied into the project as local files, not npm packages): `npx ai-elements@latest add message conversation prompt-input`. Components will live at `@/components/ai-elements/`. Import them as e.g. `import { Message } from "@/components/ai-elements/message"`.
-- [ ] Create `apps/web/src/hooks/useOrchestrator.ts` — a custom hook that:
+- [x] In `apps/web`, install: `ai`, `@ai-sdk/react`, `eventsource-parser`. Also initialize shadcn/ui (`npx shadcn@latest init`) and Tailwind CSS 4 if not already present — these are required by ai-elements.
+- [x] Add ai-elements components via the CLI (these are copied into the project as local files, not npm packages): `npx ai-elements@latest add message conversation prompt-input`. Components will live at `@/components/ai-elements/`. Import them as e.g. `import { Message } from "@/components/ai-elements/message"`.
+- [x] Create `apps/web/src/hooks/useOrchestrator.ts` — a custom hook that:
   - Manages thread state: `{ threadId, messages, status, prUrl, isStreaming }`.
   - Exposes `startSession(repoOwner, repoName, featureRequest)`:
     1. `POST /api/threads` → get `threadId`.
@@ -891,17 +891,17 @@ No blocking questions.
     2. Re-open the SSE stream if it was closed.
   - Handles reconnection: on `EventSource` error, wait 2 seconds and reopen.
 
-- [ ] Create `apps/web/src/components/ChatInterface.tsx` — the main chat component. Uses `useOrchestrator`. Renders:
+- [x] Create `apps/web/src/components/ChatInterface.tsx` — the main chat component. Uses `useOrchestrator`. Renders:
   - A scrollable message list using ai-elements' `<Messages>` or equivalent component. Assistant messages stream in character by character (use a simple state-based approach, not AI SDK streaming — since we're consuming SSE manually).
   - A text input at the bottom (disabled unless `status === 'waiting'` for user input, or the session hasn't started yet).
   - A "Start" button (shown before a session starts) and a status badge showing current graph status.
   - A banner with a link to the PR when `status === 'finished'`.
 
-- [ ] Update `apps/web/src/app/page.tsx` to render `<ChatInterface />` after a repo is selected.
+- [x] Update `apps/web/src/app/page.tsx` to render `<ChatInterface />` after a repo is selected.
 
-- [ ] Create `apps/web/src/app/api/session-token/route.ts` — a `GET` handler that returns a short-lived JWT (signed with `NEXTAUTH_SECRET`) embedding the user's GitHub ID and login. The `useOrchestrator` hook fetches this token to use in `Authorization` headers when calling the API service.
+- [x] Create `apps/web/src/app/api/session-token/route.ts` — a `GET` handler that returns a short-lived JWT (signed with `NEXTAUTH_SECRET`) embedding the user's GitHub ID and login. The `useOrchestrator` hook fetches this token to use in `Authorization` headers when calling the API service.
 
-- [ ] Basic responsive styling with Tailwind. No need for a design system beyond ai-elements.
+- [x] Basic responsive styling with Tailwind. No need for a design system beyond ai-elements.
 
 #### Post Changes Checklist
 
@@ -913,11 +913,24 @@ No blocking questions.
 
 #### Completed
 
-*(blank)*
+- Installed `ai` (^6.0.168), `@ai-sdk/react` (^3.0.170), `eventsource-parser` (^3.0.7), `jose` (^6.2.2) in `apps/web`.
+- Initialized shadcn/ui v4 with `npx shadcn@latest init --defaults --yes`. Tailwind v3 was already present; shadcn's CSS variables were integrated into `tailwind.config.ts` (adding custom color tokens like `border`, `ring`, `muted`, etc.) and `globals.css` was updated to use v3-compatible `@tailwind` directives without v4-style `@import` statements.
+- Added ai-elements components via `npx ai-elements@latest add message conversation prompt-input`. Installed 15 files: `src/components/ai-elements/{conversation,message,prompt-input}.tsx` and several `src/components/ui/` primitives. ai-elements was designed for Radix UI but shadcn generated @base-ui/react wrappers; fixed the three incompatible event-handler type usages in `prompt-input.tsx` (replaced `onSelect` → `onClick` with appropriate type casts, removed unsupported `openDelay`/`closeDelay` props from `PromptInputHoverCard`).
+- Added `TooltipProvider` to `apps/web/src/app/layout.tsx` (required by ai-elements) and set `h-full` on `html`/`body` for full-height layout.
+- Changed font from `Geist` (not available in Next.js 14 `next/font/google`) to `Inter`.
+- Added `"target": "ES2017"` to `apps/web/tsconfig.json` to resolve `FileList` spread iteration error in ai-elements.
+- Created `apps/web/src/app/api/session-token/route.ts` — `GET` handler that calls `auth()` to get the session, then uses Octokit `users.getAuthenticated()` with the session access token to resolve the GitHub `login`, then signs a 1-hour JWT with `{ userId, userLogin }` using `NEXTAUTH_SECRET`.
+- Created `apps/web/src/hooks/useOrchestrator.ts` — custom hook managing `{ threadId, messages, status, prUrl, isStreaming }`. Uses `fetch` + `ReadableStream` + `eventsource-parser` v3 for SSE (since `EventSource` doesn't support custom `Authorization` headers). Fetches a fresh session token via `/api/session-token` on `startSession` and `sendMessage`, stores it in a ref for reconnects. On stream ending without a `finish` event, reconnects after 2 seconds. Calls `NEXT_PUBLIC_API_URL` for all API service calls.
+- Created `apps/web/src/components/ChatInterface.tsx` — renders a pre-session feature-request form (textarea + Start button) and a post-session conversation view using `<Conversation>`, `<Message>`, `<MessageResponse>`, and `<PromptInput>`. Input is enabled only when `status === 'idle'` (pre-session) or `status === 'waiting'`; disabled during `running`/`finished`/`error`. Shows a status badge and a PR link banner when `status === 'finished'`.
+- Updated `apps/web/src/components/HomeContent.tsx` to render `<ChatInterface repoOwner repoName />` instead of `<div>Chat goes here</div>`.
+- Updated `apps/web/src/app/page.tsx` with full-height layout and Tailwind styling.
+- Created `apps/web/vitest.config.ts` with jsdom environment and `@vitejs/plugin-react@4` (Vite 5–compatible). Installed `@testing-library/react`, `@testing-library/dom`, `jsdom`, `@vitejs/plugin-react@4` as dev dependencies.
+- Wrote 4 tests in `apps/web/src/hooks/__tests__/useOrchestrator.test.ts` covering: initial idle state, startSession HTTP calls + stream open, assistant message appended from SSE `message` event, and error status on non-ok stream response.
+- All checklist commands pass: `pnpm -r build` ✓, `pnpm -r lint` ✓, `pnpm -r check-types` ✓, `pnpm -r test` ✓ (105 tests total: 4 new + 101 prior).
 
 #### Blocking Questions
 
-*(blank)*
+No blocking questions.
 
 ---
 
