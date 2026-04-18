@@ -770,7 +770,7 @@ No blocking questions.
 
 #### Asks
 
-- [ ] Implement `src/graph/nodes/openPr.ts`. This node must:
+- [x] Implement `src/graph/nodes/openPr.ts`. This node must:
   1. Get the installation Octokit client from `getInstallationOctokit(repoOwner, repoName)`.
   2. Push the feature branch to GitHub: run `git push origin <branch>` inside the sandbox via `runInSandbox`.
   3. Call `octokit.pulls.create` to open a PR:
@@ -784,7 +784,7 @@ No blocking questions.
   7. Call `SandboxManager.destroy(threadId)` to tear down the sandbox.
   8. Return updated state.
 
-- [ ] Write tests in `src/graph/nodes/__tests__/openPr.test.ts` mocking Octokit and `runInSandbox`. Verify the PR body contains the engineer's login and the feature request summary.
+- [x] Write tests in `src/graph/nodes/__tests__/openPr.test.ts` mocking Octokit and `runInSandbox`. Verify the PR body contains the engineer's login and the feature request summary.
 
 #### Post Changes Checklist
 
@@ -796,11 +796,13 @@ No blocking questions.
 
 #### Completed
 
-*(blank)*
+- Implemented `apps/api/src/graph/nodes/openPr.ts`: calls `getInstallationOctokit`, pushes the branch via `runInSandbox`, constructs a title-cased PR title (≤70 chars), extracts the "What are we building?" section from the tech spec for the PR body (with a footer crediting `@userLogin` and the orchestrator), calls `octokit.pulls.create`, stores `prUrl`, updates `orchestrator_sessions` to `status = 'finished'`, calls `sandboxManager.destroy(threadId)`, and returns `{ prUrl, messages }`.
+- Wrote 9 tests in `apps/api/src/graph/nodes/__tests__/openPr.test.ts` covering: git push called with correct branch, `pulls.create` called with correct owner/repo/head/base, PR title casing and 70-char truncation, PR body contains engineer login, PR body contains spec summary, `prUrl` stored in state, message appended, session updated to finished with `pr_url`, and sandbox destroyed.
+- All checklist commands pass: `pnpm -r build` ✓, `pnpm -r lint` ✓, `pnpm -r check-types` ✓, `pnpm -r test` ✓ (95 tests total: 9 new + 86 prior).
 
 #### Blocking Questions
 
-*(blank)*
+No blocking questions.
 
 ---
 
