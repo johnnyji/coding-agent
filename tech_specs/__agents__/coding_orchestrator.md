@@ -812,7 +812,7 @@ No blocking questions.
 
 The API service exposes HTTP endpoints that the Next.js frontend calls. The primary mechanism for real-time output is SSE.
 
-- [ ] In `apps/api/src/index.ts`, add the following Hono routes:
+- [x] In `apps/api/src/index.ts`, add the following Hono routes:
 
   **`POST /api/threads`**
   - Body: `{ repoOwner, repoName, featureRequest }`
@@ -839,11 +839,11 @@ The API service exposes HTTP endpoints that the Next.js frontend calls. The prim
   - Auth: same JWT validation.
   - Return the row from `orchestrator_sessions` + the current `messages` array from LangGraph state.
 
-- [ ] Add CORS middleware to the Hono app allowing requests from the Next.js app origin (configurable via `ALLOWED_ORIGIN` env var).
+- [x] Add CORS middleware to the Hono app allowing requests from the Next.js app origin (configurable via `ALLOWED_ORIGIN` env var).
 
-- [ ] Add a shared `src/auth/validateSession.ts` middleware that validates the JWT and attaches `userId`/`userLogin` to the Hono context. All `/api/threads` routes must use this middleware.
+- [x] Add a shared `src/auth/validateSession.ts` middleware that validates the JWT and attaches `userId`/`userLogin` to the Hono context. All `/api/threads` routes must use this middleware.
 
-- [ ] Write integration tests in `src/__tests__/api.test.ts` for the `POST /api/threads` and `POST /api/threads/:threadId/messages` routes, mocking LangGraph.
+- [x] Write integration tests in `src/__tests__/api.test.ts` for the `POST /api/threads` and `POST /api/threads/:threadId/messages` routes, mocking LangGraph.
 
 #### Post Changes Checklist
 
@@ -855,11 +855,21 @@ The API service exposes HTTP endpoints that the Next.js frontend calls. The prim
 
 #### Completed
 
-*(blank)*
+- Extracted the Hono app into `apps/api/src/app.ts` (exported for testability); `apps/api/src/index.ts` now just imports `app` and calls `serve()`.
+- Added CORS middleware (`hono/cors`) with `ALLOWED_ORIGIN` env var (falls back to `'*'`).
+- Created `apps/api/src/auth/validateSession.ts` — Hono middleware using `jose` (`jwtVerify`) to validate the `Authorization: Bearer <token>` JWT signed with `NEXTAUTH_SECRET`. Extracts `userId` and `userLogin` and sets them on the Hono context. Exports the `HonoEnv` type so the app is fully typed.
+- Implemented `POST /api/threads` — validates auth, inserts a row into `orchestrator_sessions`, calls `startThread()` (fire-and-forget), returns `{ threadId }`.
+- Implemented `GET /api/threads/:threadId/stream` — SSE endpoint using `streamSSE` from `hono/streaming`. Calls `subscribeToThread()` which replays buffered events then delivers live events. Closes the stream on `finish` event or client disconnect (`stream.onAbort`).
+- Implemented `POST /api/threads/:threadId/messages` — validates auth, verifies thread ownership via DB, calls `resumeThread()`, returns `{ ok: true }`.
+- Implemented `GET /api/threads/:threadId` — returns `orchestrator_sessions` row + LangGraph message history from the checkpoint.
+- Updated `apps/api/src/graph/run.ts`: replaced `graph.invoke()` with `graph.stream({ streamMode: 'updates' })` in both `startThread` and `resumeThread`. Added an in-memory per-thread event bus (`EventEmitter`) and ring buffer (max 1000 events). `extractEventsFromUpdate` converts graph update chunks to `ThreadEvent` objects (`message` / `status` / `finish`). Added exports: `ThreadEvent` type, `subscribeToThread()`, `getThreadMessages()`.
+- Installed `jose` in `apps/api`.
+- Wrote 6 integration tests in `apps/api/src/__tests__/api.test.ts` covering: thread creation (DB insert + graph start), 401 on missing auth, message resume (correct args), 404/403 for unknown/forbidden threads, 401 on missing auth for messages.
+- All checklist commands pass: `pnpm -r build` ✓, `pnpm -r lint` ✓, `pnpm -r check-types` ✓, `pnpm -r test` ✓ (101 tests total: 6 new + 95 prior).
 
 #### Blocking Questions
 
-*(blank)*
+No blocking questions.
 
 ---
 
