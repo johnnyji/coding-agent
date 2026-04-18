@@ -729,20 +729,20 @@ No blocking questions.
 
 When the delegation agent returns `ASK_USER_QUESTION`, the graph must pause, surface the question in the chat UI, and wait for the engineer's answer before continuing.
 
-- [ ] Implement `src/graph/nodes/askUser.ts`. This node must:
+- [x] Implement `src/graph/nodes/askUser.ts`. This node must:
   1. Append the question to `state.messages` as an assistant message so the chat UI displays it.
   2. Call `interrupt(state.userQuestion)` from `@langchain/langgraph`. This suspends the graph and persists state via the Postgres checkpointer.
   3. When resumed (LangGraph automatically calls the node again with the interrupt value), the resume value is the engineer's answer. Store it in state and clear `state.userQuestion`.
   4. Append the answer to `state.messages` as a user message.
   5. Reset `state.delegationDecision` to `null` so the delegate node re-reads the spec.
 
-- [ ] In `src/graph/run.ts`, update `resumeThread(threadId, userMessage)` to:
+- [x] In `src/graph/run.ts`, update `resumeThread(threadId, userMessage)` to:
   1. Lookup the thread's current state via `graph.getState({ configurable: { thread_id: threadId } })`.
   2. Call `graph.invoke(new Command({ resume: userMessage }), { configurable: { thread_id: threadId } })` to resume the interrupted graph.
 
-- [ ] Update the `orchestrator_sessions` table in Postgres: when entering `askUser`, set `status = 'waiting'`. On resume, set `status = 'running'`.
+- [x] Update the `orchestrator_sessions` table in Postgres: when entering `askUser`, set `status = 'waiting'`. On resume, set `status = 'running'`.
 
-- [ ] Write tests in `src/graph/nodes/__tests__/askUser.test.ts` verifying interrupt is called with the question and that resuming properly populates messages.
+- [x] Write tests in `src/graph/nodes/__tests__/askUser.test.ts` verifying interrupt is called with the question and that resuming properly populates messages.
 
 #### Post Changes Checklist
 
@@ -754,11 +754,15 @@ When the delegation agent returns `ASK_USER_QUESTION`, the graph must pause, sur
 
 #### Completed
 
-*(blank)*
+- Implemented `apps/api/src/graph/nodes/askUser.ts`: updates `orchestrator_sessions` to `status = 'waiting'`, calls `interrupt(userQuestion)` from `@langchain/langgraph` to suspend the graph, then on resume updates status back to `'running'` and returns `messages` (AIMessage with question + HumanMessage with answer), `userQuestion: null`, and `delegationDecision: null`.
+- Updated `apps/api/src/graph/run.ts` — `resumeThread` now calls `graph.getState(config)` before resuming to verify the thread exists, then invokes `Command({ resume: userMessage })`.
+- Wrote 7 tests in `apps/api/src/graph/nodes/__tests__/askUser.test.ts` covering: null userQuestion guard, interrupt called with the question, 'waiting' status set before interrupt, 'running' status set after resume, AIMessage/HumanMessage pair returned, userQuestion cleared, and delegationDecision reset to null.
+- Note: LangGraph's `interrupt()` throws on first call (suspending the graph) and returns the resume value on the second call — so question + answer messages are both committed atomically on resume. The chat UI can read `state.userQuestion` directly when `status === 'waiting'` to show the pending question before resume.
+- All checklist commands pass: `pnpm -r build` ✓, `pnpm -r lint` ✓, `pnpm -r check-types` ✓, `pnpm -r test` ✓ (86 tests total: 7 new + 79 prior).
 
 #### Blocking Questions
 
-*(blank)*
+No blocking questions.
 
 ---
 

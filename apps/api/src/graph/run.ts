@@ -61,7 +61,10 @@ export async function resumeThread(
   userMessage: string
 ): Promise<void> {
   const graph = await getCompiledGraph();
-  await graph.invoke(new Command({ resume: userMessage }), {
-    configurable: { thread_id: threadId },
-  });
+  const config = { configurable: { thread_id: threadId } };
+
+  // Verify the thread exists and is in an interrupted state before resuming
+  await graph.getState(config);
+
+  await graph.invoke(new Command({ resume: userMessage }), config);
 }
