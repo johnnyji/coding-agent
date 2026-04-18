@@ -672,7 +672,7 @@ No blocking questions.
 
 The QA agent starts the Distru app inside the sandbox and uses Claude Code (with Playwright MCP enabled) to run through the QA checklist in the tech spec.
 
-- [ ] Implement `src/graph/nodes/qa.ts`. This node must:
+- [x] Implement `src/graph/nodes/qa.ts`. This node must:
   1. Start the Distru dev server inside the sandbox via `runInSandbox`:
      - Run `mix phx.server` with `PORT={state.sandboxPort}` in the background (detached process, PID stored in sandbox info).
      - Poll `http://localhost:{sandboxPort}/health` every 5 seconds for up to 3 minutes until the server responds. If it doesn't start, append an error to messages and return.
@@ -687,7 +687,7 @@ The QA agent starts the Distru app inside the sandbox and uses Claude Code (with
   6. Kill the dev server process.
   7. Return updated state.
 
-- [ ] Create `src/graph/prompts/qa.ts`:
+- [x] Create `src/graph/prompts/qa.ts`:
   - You are a QA engineer using Playwright to test a feature.
   - Read the QA Checklist in the tech spec and execute each item.
   - The app is running at `http://localhost:{port}`.
@@ -696,9 +696,9 @@ The QA agent starts the Distru app inside the sandbox and uses Claude Code (with
   - If all checks pass with no bugs, write "All checks passed" in the QA Checklist.
   - Commit all spec updates.
 
-- [ ] In `src/sandbox/SandboxManager.ts`, add a `devServerPid` field to `SandboxInfo` (optional `number`), and add a `setDevServerPid(threadId, pid)` method.
+- [x] In `src/sandbox/SandboxManager.ts`, add a `devServerPid` field to `SandboxInfo` (optional `number`), and add a `setDevServerPid(threadId, pid)` method.
 
-- [ ] Write tests in `src/graph/nodes/__tests__/qa.test.ts` that mock `runInSandbox`, the health check poll, and `query`. Verify that the dev server is killed even if Claude Code throws.
+- [x] Write tests in `src/graph/nodes/__tests__/qa.test.ts` that mock `runInSandbox`, the health check poll, and `query`. Verify that the dev server is killed even if Claude Code throws.
 
 #### Post Changes Checklist
 
@@ -710,11 +710,16 @@ The QA agent starts the Distru app inside the sandbox and uses Claude Code (with
 
 #### Completed
 
-*(blank)*
+- Created `apps/api/src/graph/prompts/qa.ts` — `buildQaPrompt({ techSpecContent, sandboxPort })` returns a prompt instructing the QA agent to use Playwright to execute each checklist item, write bugs to the spec's Bugs section, write "All checks passed." if clean, and commit only the spec file.
+- Implemented `apps/api/src/graph/nodes/qa.ts`: runs `mix phx.server & echo $!` via `runInSandbox` to start the dev server in the background and capture its PID; stores the PID via `sandboxManager.setDevServerPid`; polls `http://localhost:{sandboxPort}/health` up to 36 times (every 5 s, 3-min ceiling); invokes `query()` with `allowDangerouslySkipPermissions: true`, `maxTurns: 60`, and `mcpServers: { playwright: { command: 'npx', args: ['@playwright/mcp'] } }`; re-reads the tech spec after the agent finishes; kills the dev server in a `finally` block (so it is always cleaned up even on agent failure).
+  - Note: `mcpServers` for the `query()` function takes `Record<string, McpServerConfig>` (not an array), with the server name as the key.
+- `SandboxManager.ts` already had `devServerPid` on `SandboxInfo` and `setDevServerPid(threadId, pid)` method added in Section 8.5.
+- Wrote 11 tests in `apps/api/src/graph/nodes/__tests__/qa.test.ts` covering: dev server start via `runInSandbox`, PID storage via `setDevServerPid`, health endpoint polling, invalid PID error path, server-never-ready error path (uses `vi.useFakeTimers`), output accumulation, spec re-read, summary message, query options (cwd/permissions/maxTurns/mcpServers), dev server kill on success, and dev server kill even when Claude Code throws.
+- All checklist commands pass: `pnpm -r build` ✓, `pnpm -r lint` ✓, `pnpm -r check-types` ✓, `pnpm -r test` ✓ (79 tests total: 11 new + 68 prior).
 
 #### Blocking Questions
 
-*(blank)*
+No blocking questions.
 
 ---
 
