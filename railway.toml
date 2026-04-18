@@ -1,0 +1,28 @@
+# Railway deployment configuration
+# See https://docs.railway.com/reference/config-as-code
+# Each service is configured separately in the Railway dashboard;
+# this file configures the service that owns the railway.toml at deploy time.
+# For a multi-service monorepo, link each Railway service to the same repo
+# and point it at the relevant Dockerfile below.
+
+# ── api service ──────────────────────────────────────────────────────────────
+# Railway service name: api
+# Root directory:       / (repo root, so Docker build context includes packages/)
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "apps/api/Dockerfile"
+
+[deploy]
+healthcheckPath = "/health"
+healthcheckTimeout = 300
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
+
+# ── Volumes (attach in Railway dashboard) ────────────────────────────────────
+# name: sandboxes  →  mountPath: /app/sandboxes  (service: api)
+# name: mirrors    →  mountPath: /app/mirrors    (service: api)
+
+# ── web service ──────────────────────────────────────────────────────────────
+# Create a separate Railway service pointing at the same repo with:
+#   dockerfilePath = "apps/web/Dockerfile"
+#   healthcheckPath = "/"

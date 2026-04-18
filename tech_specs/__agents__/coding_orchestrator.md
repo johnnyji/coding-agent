@@ -938,7 +938,7 @@ No blocking questions.
 
 #### Asks
 
-- [ ] Create `apps/api/Dockerfile`. It must install:
+- [x] Create `apps/api/Dockerfile`. It must install:
   - Node 20 (via official Node image)
   - Erlang/OTP 25 + Elixir 1.15.4 (via `apt` or `asdf`)
   - `mix` and `hex`
@@ -951,9 +951,9 @@ No blocking questions.
   - Expose port `8080`.
   - Entrypoint: `node dist/index.js`
 
-- [ ] Create `apps/web/Dockerfile` — standard Next.js production Dockerfile (Node 20, `pnpm install`, `pnpm build`, `node .next/standalone/server.js`). Expose port `3000`.
+- [x] Create `apps/web/Dockerfile` — standard Next.js production Dockerfile (Node 20, `pnpm install`, `pnpm build`, `node .next/standalone/server.js`). Expose port `3000`.
 
-- [ ] Create `railway.toml` at the repo root:
+- [x] Create `railway.toml` at the repo root:
   ```toml
   [[services]]
   name = "api"
@@ -981,9 +981,9 @@ No blocking questions.
   ```
   (Adjust syntax to match current Railway TOML spec.)
 
-- [ ] Create `apps/api/src/db/migrate.ts` startup call: in `src/index.ts`, run migrations before starting the Hono server (`await runMigrations()`).
+- [x] Create `apps/api/src/db/migrate.ts` startup call: in `src/index.ts`, run migrations before starting the Hono server (`await runMigrations()`).
 
-- [ ] Document all required Railway environment variables in `DEPLOYMENT.md` (only create this file, no other docs):
+- [x] Document all required Railway environment variables in `DEPLOYMENT.md` (only create this file, no other docs):
   - `DATABASE_URL` (Railway auto-provides from the Postgres service)
   - `REDIS_URL`
   - `ANTHROPIC_API_KEY`
@@ -994,7 +994,7 @@ No blocking questions.
   - `ALLOWED_ORIGIN` (the web app's Railway URL)
   - `API_URL` (the api app's Railway URL, used by the web app)
 
-- [ ] In `apps/web`, add `API_URL` to the Next.js env config so the frontend knows where to call the API service.
+- [x] In `apps/web`, add `API_URL` to the Next.js env config so the frontend knows where to call the API service.
 
 #### Post Changes Checklist
 
@@ -1006,11 +1006,18 @@ No blocking questions.
 
 #### Completed
 
-*(blank)*
+- Created `apps/api/Dockerfile` — multi-stage build (base → builder → production). Base image installs asdf, Erlang/OTP 25.3.2, Elixir 1.15.4-otp-25, Hex, Rebar, yarn, pnpm, claude CLI, `@playwright/mcp`, and Playwright Chromium with system deps. Builder stage does a monorepo-aware `pnpm install --frozen-lockfile`, builds `packages/shared` then `apps/api`. Production stage does `--prod` install and copies compiled artifacts + migration SQL files. Exposes port 8080; entrypoint `node apps/api/dist/index.js`.
+- Created `apps/web/Dockerfile` — multi-stage build (base → builder → production). Builder does monorepo pnpm install, builds shared then web (`next build`). Production stage uses `output: 'standalone'` to copy `.next/standalone`, `.next/static`, and `public`. Exposes port 3000; entrypoint `node apps/web/server.js`.
+- Added `output: 'standalone'` to `apps/web/next.config.mjs` (required by the web Dockerfile's standalone copy step).
+- Created `railway.toml` at repo root configuring the `api` service (Dockerfile path, `/health` healthcheck, restart policy). Includes comments for the `web` service config and the two required volumes (`sandboxes`, `mirrors`). Note: Railway TOML is per-service; the web service must be created as a separate Railway service pointing at `apps/web/Dockerfile`.
+- Updated `apps/api/src/index.ts` to `await runMigrations()` before calling `serve()`. Migrations run automatically on every deploy; they are idempotent (`IF NOT EXISTS`).
+- Created `DEPLOYMENT.md` documenting all required env vars for both the `api` and `web` services, the two Railway volumes, first-time setup steps, and GitHub App/OAuth configuration notes.
+- Added `NEXT_PUBLIC_API_URL=` to `.env.example` (the variable was already consumed by `useOrchestrator.ts`). Also clarified `GITHUB_APP_ID`/`GITHUB_APP_PRIVATE_KEY` (api) vs `GITHUB_CLIENT_ID`/`GITHUB_CLIENT_SECRET` (web) and added `NEXTAUTH_SECRET`/`NEXTAUTH_URL` to the example file.
+- All checklist commands pass: `pnpm -r build` ✓, `pnpm -r lint` ✓, `pnpm -r check-types` ✓, `pnpm -r test` ✓ (105 tests total, unchanged).
 
 #### Blocking Questions
 
-*(blank)*
+No blocking questions.
 
 ---
 
