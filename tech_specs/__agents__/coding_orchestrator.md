@@ -607,7 +607,7 @@ No blocking questions.
 
 This node runs automatically after every `implement` or `bugFix` commit. It detects what types of files changed, runs Distru-specific cleanup commands, fixes any issues that arise, amends the previous commit with any cleanup changes, and updates the tech spec — then hands control back to `delegate`.
 
-- [ ] Implement `src/graph/nodes/postCleanup.ts`. This node must:
+- [x] Implement `src/graph/nodes/postCleanup.ts`. This node must:
   1. Run `git diff --name-only HEAD~1 HEAD` inside the sandbox via `runInSandbox` to get the list of files changed by the last commit.
   2. Derive which cleanup categories apply from that file list:
      - **FE changes**: any `.js`, `.ts`, `.tsx`, `.jsx`, `.css`, `.scss`, files under `assets/`, or `package.json` / `yarn.lock` changed.
@@ -620,7 +620,7 @@ This node runs automatically after every `implement` or `bugFix` commit. It dete
   6. After Claude Code finishes, re-read the tech spec file from disk and update `state.techSpecContent`.
   7. Return updated state.
 
-- [ ] Create `src/graph/prompts/postCleanup.ts`. The prompt must instruct Claude Code to:
+- [x] Create `src/graph/prompts/postCleanup.ts`. The prompt must instruct Claude Code to:
   1. **If FE changes detected**: run `make fix-js`. If it exits non-zero, read the output, fix the issues, and re-run until it passes.
   2. **If BE changes detected**: run `mix format`. If it exits non-zero, fix the issues and re-run until it passes.
   3. **If GQL schema changes detected**: run `mix dump_graphql_schema`. If it exits non-zero, fix the issues and re-run until it passes.
@@ -640,7 +640,7 @@ This node runs automatically after every `implement` or `bugFix` commit. It dete
   8. Update the tech spec file: in the **Completed** block of the most recently implemented section, append a note that post-implementation cleanup ran and describe what was fixed or changed (if anything). Do not check off Asks or modify other sections.
   9. Never stop early. Run every applicable command for all detected categories before finishing.
 
-- [ ] Write tests in `src/graph/nodes/__tests__/postCleanup.test.ts` that mock `runInSandbox` and `query`. Verify:
+- [x] Write tests in `src/graph/nodes/__tests__/postCleanup.test.ts` that mock `runInSandbox` and `query`. Verify:
   - Correct cleanup categories are derived from changed file paths (FE, BE, GQL, DB all detected independently).
   - When no applicable categories are detected, Claude Code is still invoked (for the `.gitignore` check).
   - State fields `techSpecContent` and `lastAgentOutput` are updated after the node runs.
@@ -655,11 +655,14 @@ This node runs automatically after every `implement` or `bugFix` commit. It dete
 
 #### Completed
 
-*(blank)*
+- Created `apps/api/src/graph/prompts/postCleanup.ts` — exports `buildPostCleanupPrompt({ techSpecContent, changedFiles, categories })` and the `CleanupCategories` interface. The prompt is dynamically built: applicable cleanup steps (FE/BE/GQL/DB) are listed only when the corresponding category is detected; the `.gitignore` inspection step and commit-amend step are always included. The prompt also instructs Claude to append a cleanup note to the most recently implemented section's Completed block.
+- Implemented `apps/api/src/graph/nodes/postCleanup.ts`: exports `detectCleanupCategories(changedFiles: string[]): CleanupCategories` (pure function for easy testing) and `postCleanupNode`. The node runs `git diff --name-only HEAD~1 HEAD` via `runInSandbox`, passes the file list through `detectCleanupCategories`, builds the prompt, invokes `query()` with `allowDangerouslySkipPermissions: true` + `maxTurns: 40`, re-reads the tech spec after completion, and returns updated state. On failure, sets `delegationDecision: null` and appends an error `AIMessage`.
+- Wrote 15 tests in `apps/api/src/graph/nodes/__tests__/postCleanup.test.ts`: 8 tests for `detectCleanupCategories` (FE via .ts/.tsx/package.json/assets, BE via .ex/.exs, GQL via _types.ex, DB via priv/repo/migrations, unrelated files, multi-category), and 7 integration tests for `postCleanupNode` (output accumulation, spec re-read, summary message, correct query options, invoked even with no categories, error path, git diff call).
+- All checklist commands pass: `pnpm -r build` ✓, `pnpm -r lint` ✓, `pnpm -r check-types` ✓, `pnpm -r test` ✓ (68 tests total: 15 new + 53 prior).
 
 #### Blocking Questions
 
-*(blank)*
+No blocking questions.
 
 ---
 
