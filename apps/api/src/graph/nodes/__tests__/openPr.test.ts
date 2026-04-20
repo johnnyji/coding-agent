@@ -92,7 +92,7 @@ describe('openPrNode', () => {
         owner: 'acme',
         repo: 'webapp',
         head: 'feature/add-bulk-csv-export-to-the-orders-table',
-        base: 'main',
+        base: 'develop',
       }),
     )
   })

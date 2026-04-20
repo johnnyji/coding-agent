@@ -62,7 +62,7 @@ export async function openPrNode(
     title: prTitle,
     body: prBody,
     head: gitBranch,
-    base: 'main',
+    base: 'develop',
   })
 
   const prUrl = pr.html_url

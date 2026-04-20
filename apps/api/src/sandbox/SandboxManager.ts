@@ -45,9 +45,12 @@ function buildDbUrl(baseUrl: string, dbName: string): string {
   }
 }
 
+const MAX_CONCURRENT_SANDBOXES = 5
+
 export class SandboxManager {
   private sandboxes = new Map<string, SandboxRecord>()
   private allocatedPorts = new Map<string, number>()
+  private mirrorLocks = new Map<string, Promise<void>>()
   private idleCheckInterval: ReturnType<typeof setInterval>
 
   constructor() {
@@ -72,6 +75,21 @@ export class SandboxManager {
 
   private get portRangeEnd(): number {
     return parseInt(process.env.SANDBOX_PORT_RANGE_END ?? '5199', 10)
+  }
+
+  private ensureMirror(repoOwner: string, repoName: string, mirrorDir: string, repoUrl: string): Promise<void> {
+    const key = `${repoOwner}/${repoName}`
+    const prev = this.mirrorLocks.get(key) ?? Promise.resolve()
+    const next = prev.catch(() => {}).then(async () => {
+      try {
+        await execAsync(`git -C "${mirrorDir}" remote update`)
+      } catch {
+        await mkdir(path.dirname(mirrorDir), { recursive: true })
+        await execAsync(`git clone --mirror "${repoUrl}" "${mirrorDir}"`)
+      }
+    })
+    this.mirrorLocks.set(key, next.catch(() => {}))
+    return next
   }
 
   private allocatePort(): number {
@@ -103,6 +121,8 @@ export class SandboxManager {
       `SECRET_KEY_BASE=${process.env.DISTRU_SECRET_KEY_BASE ?? ''}`,
       `AWS_ACCESS_KEY_ID=${process.env.DISTRU_AWS_ACCESS_KEY_ID ?? ''}`,
       `AWS_SECRET_ACCESS_KEY=${process.env.DISTRU_AWS_SECRET_ACCESS_KEY ?? ''}`,
+      `AWS_REGION=${process.env.DISTRU_AWS_REGION ?? ''}`,
+      `S3_BUCKET=${process.env.DISTRU_S3_BUCKET ?? ''}`,
       `ANTHROPIC_API_KEY=${process.env.DISTRU_ANTHROPIC_API_KEY ?? ''}`,
       `OPENAI_API_KEY=${process.env.DISTRU_OPENAI_API_KEY ?? ''}`,
       `COHERE_API_KEY=${process.env.DISTRU_COHERE_API_KEY ?? ''}`,
@@ -122,6 +142,8 @@ export class SandboxManager {
       `SECRET_KEY_BASE=${process.env.DISTRU_SECRET_KEY_BASE ?? ''}`,
       `AWS_ACCESS_KEY_ID=${process.env.DISTRU_AWS_ACCESS_KEY_ID ?? ''}`,
       `AWS_SECRET_ACCESS_KEY=${process.env.DISTRU_AWS_SECRET_ACCESS_KEY ?? ''}`,
+      `AWS_REGION=${process.env.DISTRU_AWS_REGION ?? ''}`,
+      `S3_BUCKET=${process.env.DISTRU_S3_BUCKET ?? ''}`,
       `ANTHROPIC_API_KEY=${process.env.DISTRU_ANTHROPIC_API_KEY ?? ''}`,
       `OPENAI_API_KEY=${process.env.DISTRU_OPENAI_API_KEY ?? ''}`,
       `COHERE_API_KEY=${process.env.DISTRU_COHERE_API_KEY ?? ''}`,
@@ -138,18 +160,17 @@ export class SandboxManager {
     repoName: string,
     branch: string,
   ): Promise<SandboxInfo> {
+    if (this.sandboxes.size >= MAX_CONCURRENT_SANDBOXES) {
+      throw new Error(`Maximum concurrent sandbox limit (${MAX_CONCURRENT_SANDBOXES}) reached`)
+    }
+
     const sanitizedId = sanitizeThreadId(threadId)
     const mirrorDir = path.join(this.mirrorPath, repoOwner, `${repoName}.git`)
     const sandboxPath = path.join(this.basePath, threadId)
     const repoUrl = `https://github.com/${repoOwner}/${repoName}`
 
-    // Step 1: Ensure mirror exists; if not, clone it
-    try {
-      await execAsync(`git -C "${mirrorDir}" remote update`)
-    } catch {
-      await mkdir(path.dirname(mirrorDir), { recursive: true })
-      await execAsync(`git clone --mirror "${repoUrl}" "${mirrorDir}"`)
-    }
+    // Step 1: Ensure mirror exists; serialized per repo to avoid concurrent git corruption
+    await this.ensureMirror(repoOwner, repoName, mirrorDir, repoUrl)
 
     // Steps 2 & 3: Create worktree and checkout
     try {
@@ -158,9 +179,9 @@ export class SandboxManager {
       )
       await execAsync(`git -C "${sandboxPath}" checkout`)
     } catch {
-      // Branch doesn't exist yet — create from main
+      // Branch doesn't exist yet — create from develop
       await execAsync(
-        `git -C "${mirrorDir}" worktree add -b "${branch}" "${sandboxPath}" main`,
+        `git -C "${mirrorDir}" worktree add -b "${branch}" "${sandboxPath}" develop`,
       )
     }
 
@@ -189,8 +210,11 @@ export class SandboxManager {
     await execAsync('mix deps.get', { cwd: sandboxPath, timeout: 10 * 60 * 1000 })
     await execAsync('yarn install --frozen-lockfile', { cwd: sandboxPath, timeout: 10 * 60 * 1000 })
 
-    // Step 8: Migrate and seed
-    await execAsync('mix ecto.setup', { cwd: sandboxPath, timeout: 5 * 60 * 1000 })
+    // Step 8: Migrate and seed (DB was already created in step 5; skip ecto.create)
+    await execAsync('mix ecto.migrate && mix run priv/repo/seeds.exs', {
+      cwd: sandboxPath,
+      timeout: 5 * 60 * 1000,
+    })
 
     const info: SandboxInfo = {
       sandboxPath,

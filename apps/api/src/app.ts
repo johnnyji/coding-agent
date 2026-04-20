@@ -9,6 +9,7 @@ import {
   getThreadMessages,
 } from './graph/run.js';
 import { validateSession, type HonoEnv } from './auth/validateSession.js';
+import { getInstallationOctokit } from './github/appClient.js';
 
 const app = new Hono<HonoEnv>();
 
@@ -36,6 +37,20 @@ app.post('/api/threads', async (c) => {
 
   const userId = c.get('userId');
   const userLogin = c.get('userLogin');
+
+  // Pre-flight: verify the GitHub App is installed on the target repo
+  try {
+    await getInstallationOctokit(body.repoOwner, body.repoName);
+  } catch {
+    return c.json(
+      {
+        error: 'GitHub App is not installed on this repository. Please install it first.',
+        installUrl: `https://github.com/apps/${process.env.GITHUB_APP_SLUG ?? 'your-app'}/installations/new`,
+      },
+      422
+    );
+  }
+
   const threadId = crypto.randomUUID();
 
   await pool.query(
