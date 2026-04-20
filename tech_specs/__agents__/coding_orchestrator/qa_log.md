@@ -90,9 +90,9 @@ QA run via Playwright against `https://coding-agent-dev.distru.com` (Cloudflare 
   - **Found:** `tsx watch src/index.ts` doesn't auto-load `.env`. API runs without `NEXTAUTH_SECRET` or GitHub credentials, causing all API calls to fail.
   - **Fixed:** Changed `apps/api/package.json` dev script to `tsx watch --env-file .env src/index.ts`. Created `apps/api/.env`.
 
-- [ ] **Bug 4** — UI stuck on pre-session form after failed Start `OPEN`
+- [x] **Bug 4** — UI stuck on pre-session form after failed Start `FIXED`
   - **Found:** After clicking Start, status badge changes to "running" but the pre-session form (textarea + Start button) never disappears — even if the API call fails. `ChatInterface` gates the conversation view on `threadId !== null`. `useOrchestrator.startSession` sets `status = 'running'` immediately (before the API call), then sets `status = 'error'` if the API fails — but `threadId` stays `null` throughout. No error message is shown to the user.
-  - **Suggested fix:** Show an inline error message in the pre-session form when `status === 'error'`. Don't set `status = 'running'` until after the API call succeeds.
+  - **Fixed:** `useOrchestrator.startSession` now only sets `status = 'running'` after a valid session token is obtained. On API failure it sets `status = 'error'` and populates a new `startError` string (extracted from the API error body). `ChatInterface` displays `startError` as an inline red message below the textarea and disables the Start button (showing "Starting…") while the API call is in flight.
 
 - [ ] **Bug 5** — Repo selector shows all repos instead of only DistruApp/distru `OPEN`
   - **Found:** Dropdown lists all GitHub repos accessible to the user (~75+ repos). The `/api/repos` route returns everything from `repos.listForAuthenticatedUser`. The orchestrator is built exclusively for `DistruApp/distru` and won't work correctly on arbitrary repos.
@@ -185,9 +185,9 @@ QA run via Playwright MCP against `https://coding-agent-dev.distru.com`. Auth se
   - **Found:** 2026-04-20 Session 1 — `apps/api/.env` contained `SHA256:5qHIH0k2+...` (the fingerprint from GitHub App settings) instead of the actual private key.
   - **Fixed:** Root `.env` already contained the correct PEM key. Consolidated all env vars into root `.env`; deleted `apps/api/.env` and `apps/web/.env.local`; updated both dev scripts to `--env-file ../../.env` / `node --env-file=../../.env`. Updated `PLAYWRIGHT_QA_SETUP.md` to document single-file approach.
 
-- [ ] **Bug 12** — `handleStart` unhandled promise rejection creates dev error overlay `OPEN`
+- [x] **Bug 12** — `handleStart` unhandled promise rejection creates dev error overlay `FIXED`
   - **Found:** Clicking Start when API returns 422: `ChatInterface.tsx` `handleStart` calls `await startSession(...)` with no try/catch. `useOrchestrator` sets `status = 'error'` and re-throws. Since the click handler uses `void handleStart()`, the rejection is unhandled — React dev mode surfaces it as a Next.js error overlay. In production this is silent but the user still gets no actionable error message beyond the "error" status badge.
-  - **Suggested fix:** Wrap `await startSession(...)` in a try/catch in `handleStart` to swallow the re-throw (the hook already sets `status = 'error'`). Optionally add an inline error message below the Start button when `status === 'error'`.
+  - **Fixed:** `startSession` no longer throws — it handles all error paths internally by setting `status = 'error'` and `startError`. `handleStart` in `ChatInterface` is now a plain (non-async) function that calls `void startSession(...)`, so there is no unhandled rejection.
 
 ---
 
@@ -251,10 +251,50 @@ QA run via Playwright MCP against `https://coding-agent-dev.distru.com`. All thr
   - **Found:** 2026-04-20 Session 1. Same root cause as Bug #5.
   - **Fixed:** Same fix as Bug #5 — `RepoSelector` removed, repo hardcoded.
 
-- [ ] **Bug 13** — SSE stream blocked by Chrome Private Network Access (PNA) restriction `OPEN`
+- [x] **Bug 13** — SSE stream blocked by Chrome Private Network Access (PNA) restriction `FIXED`
   - **Found:** After successful session creation, the browser (at `https://coding-agent-dev.distru.com`) attempts to open an `EventSource` to `http://localhost:8080/api/threads/{threadId}/stream`. Chrome blocks this with: "Permission was denied for this request to access the `loopback` address space." `NEXT_PUBLIC_API_URL=http://localhost:8080` is unreachable from a browser loaded from a public HTTPS origin — Chrome's PNA policy forbids it.
-  - **Suggested fix:** Expose the API service through the Cloudflare tunnel with its own hostname (e.g. `https://coding-agent-api-dev.distru.com`) and update `NEXT_PUBLIC_API_URL` to that URL. Alternatively, proxy SSE and API calls through the Next.js server (`/api/proxy/...`) so the browser never makes direct requests to `localhost:8080`.
+  - **Fixed:** Created `apps/web/src/app/api/proxy/[...path]/route.ts` — a Next.js server-side catch-all route that forwards all requests (including SSE streaming) from `/api/proxy/{path}` to `${NEXT_PUBLIC_API_URL}/api/{path}`. The proxy runs server-side so no PNA restriction applies. Updated `useOrchestrator.ts` to use `/api/proxy/threads/...` instead of calling the API service directly from the browser.
 
-- [ ] **Bug 14** — Unhandled `SandboxManager.create()` rejection crashes the API process `OPEN`
+- [x] **Bug 14** — Unhandled `SandboxManager.create()` rejection crashes the API process `FIXED`
   - **Found:** After `POST /api/threads` succeeded and the graph started, `techSpecNode` called `SandboxManager.create()`, which attempted `mkdir '/app'` and threw `ENOENT: no such file or directory`. Because `startThread()` in `run.ts` fire-and-forgets `graph.stream()` without a `.catch()` handler, the unhandled rejection propagated to the Node.js process and crashed it. The `tsx watch` parent process survived but the HTTP server stopped responding. Session status in the DB remained `'running'` permanently (never set to `'error'`).
-  - **Suggested fix:** (1) Wrap the `graph.stream()` loop in `startThread` with a try/catch (or `.catch()`) that logs the error and updates `orchestrator_sessions` to `status = 'error'`. (2) Add a top-level `process.on('unhandledRejection', handler)` in `src/index.ts` as a safety net. (3) The `/app/sandboxes` and `/app/mirrors` paths are Railway-only; `PLAYWRIGHT_QA_SETUP.md` should document that full E2E graph execution requires Railway (or manually creating those paths locally).
+  - **Fixed:** (1) `runGraphStream` in `run.ts` already caught stream errors and emitted error events; updated it to also `UPDATE orchestrator_sessions SET status = 'error'` so the DB reflects the true state. (2) Added `process.on('unhandledRejection', ...)` in `src/index.ts` as a safety net that logs and does not crash the process.
+
+---
+
+## 2026-04-20 — Session 5
+
+QA run via Playwright MCP against `https://coding-agent-dev.distru.com`. Auth session valid. Services running: API on 8080, web on 3001 (restarted mid-session, see Bug #16), Cloudflare tunnel active.
+
+**Key findings this session:** Confirmed fixes for Bugs #4, #12, #13, #14. Confirmed SSE stream works end-to-end through proxy. Found two new bugs: #15 (SSE error content not shown to user) and #16 (broken web dev script).
+
+### Steps Taken
+
+- [x] Services verified: `GET /health` → `{"status":"ok"}`, web 3001 → 200, tunnel → 200
+- [x] Authenticated view renders: "Coding Agent" heading + `DistruApp/distru` hardcoded — zero console errors on fresh page load
+- [x] Bug #4 re-QA: Navigating to `/api/auth/signout` returned 500 (see Bug #17 below), putting session into a bad state. Subsequent Start click → session-token returned 401 → status badge transitioned to `"error"` and inline `startError` message appeared: "Failed to get session token. Please refresh and try again." Pre-session form persisted (threadId stayed null) — **CONFIRMED FIXED**
+- [x] Bug #12 re-QA: No unhandled promise rejection / no Next.js dev overlay on error — **CONFIRMED FIXED**
+- [x] Bug #16 found and FIXED mid-session: web dev server crashed after kill/restart due to broken dev script (see Bug #16 below). Fixed `apps/web/package.json` dev script; restarted successfully.
+- [x] After restart: fresh page load — zero console errors, React hydrated correctly, `StatusBadge` styled correctly
+- [x] Typing in textarea: note — Playwright `browser_type` (fill) does not trigger React `onChange`; must press a key afterward to activate the Start button. App itself is fine; this is a test-runner quirk.
+- [x] Start button enables after key press, start button disables while `status === 'running'` — correct
+- [x] Clicking Start: `POST /api/proxy/threads` → 200 → `threadId` obtained → conversation view renders, pre-session form disappears, user's feature request appears as first message — **proxy works for POST requests**
+- [x] SSE stream delivers error event through proxy: `status` transitions from `"running"` to `"error"` via SSE event — **Bug #13 fix confirmed working**
+- [x] API process stays alive after graph error (SandboxManager ENOENT on `/app`) — **Bug #14 fix confirmed working**
+- [x] DB updated: `orchestrator_sessions` row has `status = 'error'` after graph failure — **Bug #14 fix confirmed working**
+- [ ] Error message from graph not displayed in conversation — Bug #15
+- [ ] Status transitions: `running` → `waiting` → `running` → `finished` — blocked: SandboxManager fails locally (`/app` path absent); full E2E requires Railway deployment
+- [ ] PR link banner, message input on `waiting`, session reconnect — same blocker
+
+### Bugs Found
+
+- [x] **Bug 16** — `apps/web/package.json` dev script broken `FIXED`
+  - **Found:** `node --env-file=../../.env ./node_modules/.bin/next dev -p 3001` fails because `.bin/next` is a shell script (`#!/bin/sh`), not a Node.js module. `node` throws `SyntaxError: missing ) after argument list` when trying to execute it as JS. The previously-running server had been started differently (direct node invocation on `next/dist/bin/next`) before this script was modified.
+  - **Fixed:** Changed dev script to `node --env-file=../../.env ./node_modules/next/dist/bin/next dev -p 3001`, which points to the actual Node.js entry point.
+
+- [ ] **Bug 15** — SSE `error` events don't surface error content to the user `OPEN`
+  - **Found:** When the graph fails (e.g., SandboxManager ENOENT), `runGraphStream` emits `{ type: 'error', content: 'Error: ENOENT: ...' }` on the SSE stream. `useOrchestrator.ts` receives this event but only calls `setStatus('error')` — the `content` field is discarded. The user sees the "error" status badge but has no indication of what went wrong or what to do next.
+  - **Suggested fix:** In the `error` event handler in `useOrchestrator.ts`, append the error content to `messages` as a system message: `setMessages(prev => [...prev, { role: 'system', content: data.content }])`. In `ChatInterface.tsx`, render system messages with distinct styling (e.g., red text).
+
+- [ ] **Bug 17** — `GET /api/auth/signout` returns 500 `OPEN`
+  - **Found:** Navigating to `https://coding-agent-dev.distru.com/api/auth/signout` (GET) returns a "Server error — There is a problem with the server configuration" page. `POST /api/auth/signout` also returns 500. Root cause not fully diagnosed but likely a missing CSRF token or misconfiguration of Auth.js v5 signout in the App Router. Consequence: users cannot sign out via the UI.
+  - **Suggested fix:** Investigate Auth.js v5 signout configuration. In Auth.js v5 with App Router, signout typically requires a server action (`signOut()` from `@/auth`) rather than a direct GET/POST to the route. Add a "Sign out" button that calls the `signOut` server action.
