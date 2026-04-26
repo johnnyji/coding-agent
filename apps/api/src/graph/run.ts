@@ -2,6 +2,7 @@ import { EventEmitter } from 'events';
 import { Command } from '@langchain/langgraph';
 import { AIMessage } from '@langchain/core/messages';
 import { buildGraph } from './graph.js';
+import pool from '../db/client.js';
 
 export interface StartInput {
   threadId: string;
@@ -88,6 +89,15 @@ async function runGraphStream(
     }
   } catch (err) {
     emitThreadEvent(threadId, { type: 'error', content: String(err) });
+    // Persist the error status so the UI and DB stay consistent
+    try {
+      await pool.query(
+        `UPDATE orchestrator_sessions SET status = 'error', updated_at = NOW() WHERE thread_id = $1`,
+        [threadId]
+      );
+    } catch (dbErr) {
+      console.error(`[graph] failed to update session status to error for thread ${threadId}:`, dbErr);
+    }
   }
 }
 
@@ -117,14 +127,15 @@ export async function startThread(input: StartInput): Promise<string> {
   };
 
   // Fire-and-forget: stream graph events to the event bus
-  const stream = graph.stream(initialState, {
-    configurable: { thread_id: threadId },
-    streamMode: 'updates',
-  } as Parameters<typeof graph.stream>[1]) as unknown as AsyncIterable<
-    Record<string, unknown>
-  >;
-
-  runGraphStream(threadId, stream).catch((err: unknown) =>
+  void (async () => {
+    const stream = (await graph.stream(initialState, {
+      configurable: { thread_id: threadId },
+      streamMode: 'updates',
+    } as Parameters<typeof graph.stream>[1])) as unknown as AsyncIterable<
+      Record<string, unknown>
+    >;
+    await runGraphStream(threadId, stream);
+  })().catch((err: unknown) =>
     console.error(`[graph] thread ${threadId} error:`, err)
   );
 
@@ -142,14 +153,15 @@ export async function resumeThread(
   await graph.getState(config);
 
   // Resume graph in background, streaming events to the bus
-  const stream = graph.stream(new Command({ resume: userMessage }), {
-    ...config,
-    streamMode: 'updates',
-  } as Parameters<typeof graph.stream>[1]) as unknown as AsyncIterable<
-    Record<string, unknown>
-  >;
-
-  runGraphStream(threadId, stream).catch((err: unknown) =>
+  void (async () => {
+    const stream = (await graph.stream(new Command({ resume: userMessage }), {
+      ...config,
+      streamMode: 'updates',
+    } as Parameters<typeof graph.stream>[1])) as unknown as AsyncIterable<
+      Record<string, unknown>
+    >;
+    await runGraphStream(threadId, stream);
+  })().catch((err: unknown) =>
     console.error(`[graph] resume thread ${threadId} error:`, err)
   );
 }
@@ -162,13 +174,30 @@ export async function getThreadMessages(threadId: string): Promise<unknown[]> {
 }
 
 /**
- * Subscribe to thread events. Replays buffered events from thread start,
- * then delivers live events as they arrive.
+ * Subscribe to thread events with cursor-based replay.
+ *
+ * WHY THIS EXISTS
+ * ---------------
+ * The SSE connection can drop and reconnect at any time (network blip,
+ * Cloudflare restart, browser sleep). When it does, the client re-calls
+ * this function. Without a cursor, we would replay the entire buffer from
+ * index 0 every time — and since the client never clears its message list,
+ * every reconnect would duplicate all previously received messages.
+ *
+ * THE FIX
+ * -------
+ * The client tracks how many events it has received (eventCountRef) and
+ * passes that count as `fromIndex` on every (re)connect. We only replay
+ * events the client hasn't seen yet. On initial connect fromIndex is 0,
+ * so the full buffer is replayed to catch up on any events that fired
+ * before the SSE connection was established.
+ *
  * Returns an unsubscribe function.
  */
 export function subscribeToThread(
   threadId: string,
-  onEvent: (event: ThreadEvent) => void
+  onEvent: (event: ThreadEvent) => void,
+  fromIndex = 0,
 ): () => void {
   // Capture current buffer length BEFORE adding the listener.
   // Since JS is single-threaded, no events can sneak in between these two
@@ -176,11 +205,12 @@ export function subscribeToThread(
   const buffer = threadBuffers.get(threadId) ?? [];
   const snapshotLength = buffer.length;
 
-  // Add live listener first so no events are missed after the snapshot
+  // Add live listener first so no events are missed after the snapshot.
   threadEmitter.on(threadId, onEvent);
 
-  // Replay historical events (everything before this subscription)
-  for (let i = 0; i < snapshotLength; i++) {
+  // Replay only the events the client hasn't seen yet.
+  // fromIndex=0 on initial connect (full replay); >0 on reconnect (partial replay).
+  for (let i = fromIndex; i < snapshotLength; i++) {
     onEvent(buffer[i]);
   }
 

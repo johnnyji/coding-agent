@@ -6,3 +6,7 @@ dist/
 !.env.example
 sandboxes/
 .cloudflared/
+.playwright-mcp/
+
+# OpenMemory - IDE/Assistant specific rules
+.cursor/rules/openmemory.mdc

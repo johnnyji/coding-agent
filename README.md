@@ -41,10 +41,13 @@ Then fill in the values in `.env`:
 
 | Variable | Description |
 |---|---|
-| `GITHUB_APP_ID` | ID of your GitHub App |
+| `GITHUB_APP_ID` | ID of your GitHub App (bot) |
 | `GITHUB_APP_PRIVATE_KEY` | Private key for your GitHub App — paste the full PEM file contents directly as the value (multi-line string) |
-| `GITHUB_CLIENT_ID` | OAuth client ID from your GitHub App |
-| `GITHUB_CLIENT_SECRET` | OAuth client secret from your GitHub App |
+| `GITHUB_APP_SLUG` | Slug of your GitHub App (the URL-safe name shown in the app settings) |
+| `GITHUB_CLIENT_ID` | Client ID from your **GitHub OAuth App** (for web sign-in — see step 8 below) |
+| `GITHUB_CLIENT_SECRET` | Client secret from your **GitHub OAuth App** (for web sign-in — see step 8 below) |
+| `NEXTAUTH_SECRET` | Random secret for NextAuth session signing — run `openssl rand -hex 32` |
+| `NEXTAUTH_URL` | Base URL of the web app (e.g. `http://localhost:3001`) |
 | `DATABASE_URL` | PostgreSQL connection string (e.g. `postgres://user:pass@localhost:5432/coding_agent`) |
 | `ANTHROPIC_API_KEY` | Your Anthropic API key |
 | `SANDBOX_BASE_PATH` | Local path for sandbox workspaces (default: `/app/sandboxes`) |
@@ -129,7 +132,7 @@ pnpm dev
 
 This starts all apps in parallel:
 - **API** (Hono) — `http://localhost:8080` (tsx watch, auto-reloads on changes)
-- **Web** (Next.js) — `http://localhost:3000`
+- **Web** (Next.js) — `http://localhost:3001`
 - **Cloudflare Tunnel** — proxies `<your-name>-coding-agent-dev.distru.com` → `localhost:8080`
 
 ## Project Structure
@@ -154,11 +157,21 @@ tech_specs/   # Technical design documents for agent features
 | `pnpm check-types` | TypeScript type check all packages |
 | `pnpm --filter api db:migrate` | Run database migrations |
 
-## GitHub App Setup
+## GitHub Setup
+
+Two separate GitHub credentials are required — one for the bot that opens PRs, one for web sign-in.
+
+### GitHub App (bot — used by the API service)
 
 1. Go to **GitHub → Settings → Developer Settings → GitHub Apps → New GitHub App**
 2. Set the webhook URL to `https://<your-name>-coding-agent-dev.distru.com/webhook`
-3. Grant the necessary repository permissions (contents, pull requests, issues)
+3. Grant repository permissions: `Contents` (Read & Write), `Pull requests` (Read & Write), `Issues` (Read & Write)
 4. Subscribe to events: `push`, `pull_request`, `issues`
 5. Generate a private key and download the `.pem` file
-6. Copy the App ID, Client ID, Client Secret, and private key contents into your `.env`
+6. Copy the **App ID**, **App slug**, and **private key contents** into `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, and `GITHUB_APP_PRIVATE_KEY` in your `.env`
+
+### GitHub OAuth App (for web sign-in)
+
+1. Go to **GitHub → Settings → Developer Settings → OAuth Apps → New OAuth App**
+2. Set the Authorization callback URL to `http://localhost:3001/api/auth/callback/github`
+3. Copy the **Client ID** and **Client Secret** into `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` in your `.env`

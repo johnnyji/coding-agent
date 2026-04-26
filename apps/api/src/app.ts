@@ -73,17 +73,26 @@ app.post('/api/threads', async (c) => {
 });
 
 // GET /api/threads/:threadId/stream — SSE stream of graph events
+//
+// Query params:
+//   from (optional, default 0) — cursor sent by the client indicating how many
+//   events it has already received. We replay only events from that index
+//   onward, preventing duplicate messages on reconnect. See: subscribeToThread
+//   in graph/run.ts and eventCountRef in useOrchestrator.ts.
 app.get('/api/threads/:threadId/stream', (c) => {
   const threadId = c.req.param('threadId');
+  const fromIndex = Math.max(0, parseInt(c.req.query('from') ?? '0', 10));
 
   return streamSSE(c, async (stream) => {
     await new Promise<void>((resolve) => {
       let unsubscribeFn: (() => void) | null = null;
       let resolved = false;
+      let keepaliveTimer: ReturnType<typeof setInterval> | null = null;
 
       function cleanup() {
         if (!resolved) {
           resolved = true;
+          if (keepaliveTimer) clearInterval(keepaliveTimer);
           unsubscribeFn?.();
           resolve();
         }
@@ -91,13 +100,24 @@ app.get('/api/threads/:threadId/stream', (c) => {
 
       stream.onAbort(cleanup);
 
-      unsubscribeFn = subscribeToThread(threadId, (event) => {
-        stream.writeSSE({ data: JSON.stringify(event) }).catch(cleanup);
-        if (event.type === 'finish') {
-          // Defer so unsubscribeFn is assigned before cleanup runs
-          queueMicrotask(cleanup);
-        }
-      });
+      // Send an SSE comment every 30s to prevent Cloudflare 524 timeouts.
+      // Cloudflare closes upstream connections that are silent for >60s, so we
+      // keep the pipe alive with a no-op ping. The client ignores comment lines.
+      keepaliveTimer = setInterval(() => {
+        stream.write(': ping\n\n').catch(cleanup);
+      }, 30_000);
+
+      unsubscribeFn = subscribeToThread(
+        threadId,
+        (event) => {
+          stream.writeSSE({ data: JSON.stringify(event) }).catch(cleanup);
+          if (event.type === 'finish') {
+            // Defer so unsubscribeFn is assigned before cleanup runs
+            queueMicrotask(cleanup);
+          }
+        },
+        fromIndex,
+      );
     });
   });
 });

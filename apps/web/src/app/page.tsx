@@ -1,4 +1,4 @@
-import { auth, signIn } from '@/auth'
+import { auth, signIn, signOut } from '@/auth'
 import { HomeContent } from '@/components/HomeContent'
 
 export default async function Home() {
@@ -27,8 +27,21 @@ export default async function Home() {
 
   return (
     <main className="flex h-full flex-col">
-      <header className="flex items-center border-b px-4 py-3">
+      <header className="flex items-center justify-between border-b px-4 py-3">
         <h1 className="text-lg font-bold">Coding Agent</h1>
+        <form
+          action={async () => {
+            'use server'
+            await signOut()
+          }}
+        >
+          <button
+            className="rounded-md px-3 py-1 text-sm text-gray-500 hover:bg-gray-100"
+            type="submit"
+          >
+            Sign out
+          </button>
+        </form>
       </header>
       <div className="flex-1 overflow-hidden">
         <HomeContent />

@@ -16,7 +16,9 @@ interface SseEvent {
   prUrl?: string
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? ''
+// Proxy all API calls through the Next.js server to avoid Chrome's Private
+// Network Access (PNA) restriction (public HTTPS → localhost blocked).
+const API_URL = '/api/proxy'
 
 async function getSessionToken(): Promise<string> {
   const res = await fetch('/api/session-token')
@@ -31,11 +33,22 @@ export function useOrchestrator() {
   const [status, setStatus] = useState<OrchestratorStatus>('idle')
   const [prUrl, setPrUrl] = useState<string | null>(null)
   const [isStreaming, setIsStreaming] = useState(false)
+  const [startError, setStartError] = useState<string | null>(null)
 
   const abortRef = useRef<AbortController | null>(null)
   const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const tokenRef = useRef<string | null>(null)
   const threadIdRef = useRef<string | null>(null)
+
+  // Cursor for duplicate-free reconnects.
+  //
+  // The server buffers every event emitted during a thread's lifetime and
+  // replays them from a given index on each (re)connect. Without a cursor it
+  // would always replay from index 0, duplicating every message the client had
+  // already received. We track the total number of events received here and
+  // send it as `?from=` on every openStream call so the server only replays
+  // what we haven't seen yet. Reset to 0 when a new session starts.
+  const eventCountRef = useRef(0)
 
   // Keep ref in sync with state for use inside callbacks
   useEffect(() => {
@@ -55,6 +68,11 @@ export function useOrchestrator() {
 
     const parser = createParser({
       onEvent(evt) {
+        // Increment the cursor for every event the server sends, regardless of
+        // type. This keeps eventCountRef in sync with the server-side buffer
+        // index so that reconnects request exactly the right starting position.
+        eventCountRef.current++
+
         try {
           const data = JSON.parse(evt.data) as SseEvent
 
@@ -67,6 +85,9 @@ export function useOrchestrator() {
             }
           } else if (data.type === 'error') {
             setStatus('error')
+            if (data.content) {
+              setMessages((prev) => [...prev, { role: 'system', content: data.content! }])
+            }
           } else if (data.type === 'finish') {
             receivedFinish = true
             setStatus('finished')
@@ -79,14 +100,26 @@ export function useOrchestrator() {
     })
 
     try {
-      const res = await fetch(`${API_URL}/api/threads/${id}/stream`, {
+      // Pass the cursor so the server replays only events we haven't seen yet.
+      // On initial connect eventCountRef.current is 0 (full replay of any
+      // buffered events). On reconnect it reflects how many events we received
+      // before the drop, so we get only the missed ones — no duplicates.
+      const res = await fetch(`${API_URL}/threads/${id}/stream?from=${eventCountRef.current}`, {
         headers: { Authorization: `Bearer ${tokenRef.current}` },
         signal: controller.signal,
       })
 
       if (!res.ok || !res.body) {
-        setStatus('error')
         setIsStreaming(false)
+        // Permanent client errors (auth/not found) — don't reconnect
+        if (res.status === 401 || res.status === 403 || res.status === 404) {
+          setStatus('error')
+          return
+        }
+        // Transient error (502, 524, etc.) — reconnect after delay
+        reconnectRef.current = setTimeout(() => {
+          void openStream(id)
+        }, 2000)
         return
       }
 
@@ -118,14 +151,27 @@ export function useOrchestrator() {
 
   const startSession = useCallback(
     async (repoOwner: string, repoName: string, featureRequest: string) => {
+      setStartError(null)
       setMessages([{ role: 'user', content: featureRequest }])
-      setStatus('running')
       setPrUrl(null)
 
-      const token = await getSessionToken()
+      let token: string
+      try {
+        token = await getSessionToken()
+      } catch {
+        setStatus('error')
+        setStartError('Failed to get session token. Please refresh and try again.')
+        return
+      }
       tokenRef.current = token
+      // New session — reset the event cursor so the server replays the full
+      // buffer from index 0 on initial connect.
+      eventCountRef.current = 0
 
-      const res = await fetch(`${API_URL}/api/threads`, {
+      // Only set running after we have a valid token and are about to hit the API
+      setStatus('running')
+
+      const res = await fetch(`${API_URL}/threads`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -135,8 +181,11 @@ export function useOrchestrator() {
       })
 
       if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string }
+        const message = body.error ?? 'Failed to start session. Please try again.'
         setStatus('error')
-        throw new Error('Failed to start session')
+        setStartError(message)
+        return
       }
 
       const { threadId: id } = (await res.json()) as { threadId: string }
@@ -157,7 +206,7 @@ export function useOrchestrator() {
       const token = await getSessionToken()
       tokenRef.current = token
 
-      const res = await fetch(`${API_URL}/api/threads/${id}/messages`, {
+      const res = await fetch(`${API_URL}/threads/${id}/messages`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -180,5 +229,5 @@ export function useOrchestrator() {
     }
   }, [])
 
-  return { threadId, messages, status, prUrl, isStreaming, startSession, sendMessage }
+  return { threadId, messages, status, prUrl, isStreaming, startError, startSession, sendMessage }
 }

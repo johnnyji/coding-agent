@@ -33,9 +33,15 @@ vi.mock('../graph/graph.js', () => ({
   }),
 }));
 
+// Mock GitHub app client so the installation pre-flight check passes by default
+vi.mock('../github/appClient.js', () => ({
+  getInstallationOctokit: vi.fn().mockResolvedValue({}),
+}));
+
 // Import after mocks are established
 import { app } from '../app.js';
 import { startThread, resumeThread } from '../graph/run.js';
+import { getInstallationOctokit } from '../github/appClient.js';
 
 // Set required env vars before any route handler runs
 process.env.NEXTAUTH_SECRET = 'test-secret';
@@ -89,6 +95,25 @@ describe('POST /api/threads', () => {
         userLogin: 'testuser',
       })
     );
+  });
+
+  it('returns 422 when the GitHub App is not installed on the repo', async () => {
+    vi.mocked(getInstallationOctokit).mockRejectedValueOnce(new Error('Not found'));
+
+    const res = await request('/api/threads', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...AUTH_HEADER },
+      body: JSON.stringify({
+        repoOwner: 'acme',
+        repoName: 'backend',
+        featureRequest: 'Add CSV export',
+      }),
+    });
+
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toContain('GitHub App is not installed');
+    expect(startThread).not.toHaveBeenCalled();
   });
 
   it('returns 401 when no Authorization header is provided', async () => {

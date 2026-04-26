@@ -81,7 +81,7 @@ describe('useOrchestrator', () => {
 
     expect(fetchMock).toHaveBeenCalledWith('/api/session-token')
     expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining('/api/threads'),
+      expect.stringContaining('/api/proxy/threads'),
       expect.objectContaining({ method: 'POST' }),
     )
   })

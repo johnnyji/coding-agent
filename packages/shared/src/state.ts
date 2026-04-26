@@ -28,6 +28,8 @@ export interface OrchestratorState {
   sandboxPort: number           // port reserved for QA dev server
 
   // Orchestration
+  // Note: internally the graph stores BaseMessage[] (LangChain); this is the
+  // serialized form returned at API boundaries (GET /api/threads/:threadId).
   messages: { role: 'user' | 'assistant' | 'system'; content: string }[]
   delegationDecision: DelegationDecision | null
   userQuestion: string | null   // populated when delegateNode returns ASK_USER_QUESTION

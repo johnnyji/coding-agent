@@ -44,15 +44,15 @@ function StatusBadge({ status }: { status: OrchestratorStatus }) {
 }
 
 export function ChatInterface({ repoOwner, repoName }: ChatInterfaceProps) {
-  const { threadId, messages, status, prUrl, startSession, sendMessage } = useOrchestrator()
+  const { threadId, messages, status, prUrl, startError, startSession, sendMessage } = useOrchestrator()
   const [featureRequest, setFeatureRequest] = useState('')
 
   const isStarted = threadId !== null
   const inputEnabled = !isStarted || status === 'waiting'
 
-  const handleStart = async () => {
+  const handleStart = () => {
     if (!featureRequest.trim()) return
-    await startSession(repoOwner, repoName, featureRequest)
+    void startSession(repoOwner, repoName, featureRequest)
   }
 
   return (
@@ -90,21 +90,33 @@ export function ChatInterface({ repoOwner, repoName }: ChatInterfaceProps) {
             placeholder="e.g. Add bulk CSV export to the orders table"
             value={featureRequest}
           />
-          <Button disabled={!featureRequest.trim()} onClick={() => void handleStart()}>
-            Start
+          {startError && (
+            <p className="max-w-lg text-sm text-red-600">{startError}</p>
+          )}
+          <Button
+            disabled={!featureRequest.trim() || status === 'running'}
+            onClick={handleStart}
+          >
+            {status === 'running' ? 'Starting…' : 'Start'}
           </Button>
         </div>
       ) : (
         <>
           <Conversation className="flex-1">
             <ConversationContent>
-              {messages.map((msg, i) => (
-                <Message from={msg.role === 'user' ? 'user' : 'assistant'} key={i}>
-                  <MessageContent>
-                    <MessageResponse isAnimating={false}>{msg.content}</MessageResponse>
-                  </MessageContent>
-                </Message>
-              ))}
+              {messages.map((msg, i) =>
+                msg.role === 'system' ? (
+                  <div className="rounded-md bg-red-50 px-4 py-2 text-sm text-red-700" key={i}>
+                    {msg.content}
+                  </div>
+                ) : (
+                  <Message from={msg.role === 'user' ? 'user' : 'assistant'} key={i}>
+                    <MessageContent>
+                      <MessageResponse isAnimating={false}>{msg.content}</MessageResponse>
+                    </MessageContent>
+                  </Message>
+                ),
+              )}
             </ConversationContent>
             <ConversationScrollButton />
           </Conversation>

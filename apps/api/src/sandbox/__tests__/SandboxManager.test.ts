@@ -113,6 +113,18 @@ describe('SandboxManager', () => {
     })
   })
 
+  describe('concurrent sandbox limit', () => {
+    it('throws when MAX_CONCURRENT_SANDBOXES (5) is reached', async () => {
+      // Fill up to the limit
+      for (let i = 1; i <= 5; i++) {
+        await manager.create(`thread-limit-${i}`, 'owner', 'repo', `branch-${i}`)
+      }
+      await expect(
+        manager.create('thread-over-limit', 'owner', 'repo', 'branch-extra'),
+      ).rejects.toThrow('Maximum concurrent sandbox limit')
+    })
+  })
+
   describe('destroy', () => {
     it('removes the sandbox from getSandboxInfo', async () => {
       await manager.create('thread-X', 'owner', 'repo', 'branch')
