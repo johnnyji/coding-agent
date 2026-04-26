@@ -43,7 +43,7 @@ RUN asdf plugin add erlang https://github.com/asdf-vm/asdf-erlang.git \
 RUN mix local.hex --force && mix local.rebar --force
 
 # Install yarn and pnpm
-RUN npm install -g yarn pnpm
+RUN npm install -g --force yarn pnpm
 
 # Install Claude Code CLI
 RUN npm install -g @anthropic-ai/claude-code
