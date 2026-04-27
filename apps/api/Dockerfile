@@ -1,5 +1,5 @@
 # ---- Base: Elixir 1.15.4 / Erlang 25.3.2 + Node 20 ----
-FROM hexpm/elixir:1.15.4-erlang-25.3.2-debian-bookworm-20231120-slim AS base
+FROM hexpm/elixir:1.15.4-erlang-25.3.2-debian-bookworm-20230612-slim AS base
 
 # Install system dependencies + Node 20
 RUN apt-get update && apt-get install -y --no-install-recommends \
