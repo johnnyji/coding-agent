@@ -1,7 +1,7 @@
-# ---- Base: Node 20 + system deps ----
-FROM node:20-bookworm-slim AS base
+# ---- Base: Elixir 1.15.4 / Erlang 25.3.2 + Node 20 ----
+FROM hexpm/elixir:1.15.4-erlang-25.3.2-debian-bookworm-20231120-slim AS base
 
-# Install system dependencies
+# Install system dependencies + Node 20
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     curl \
@@ -10,8 +10,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gnupg \
     ca-certificates \
     build-essential \
-    libssl-dev \
-    libncurses-dev \
     # Needed for Playwright Chromium
     libnss3 \
     libatk-bridge2.0-0 \
@@ -20,24 +18,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgtk-3-0 \
     libgbm1 \
     libasound2 \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
-
-# Install asdf for version-managed Elixir/Erlang
-ENV ASDF_DIR=/root/.asdf
-RUN git clone https://github.com/asdf-vm/asdf.git "$ASDF_DIR" --branch v0.14.0 \
-    && echo ". $ASDF_DIR/asdf.sh" >> /root/.bashrc \
-    && echo ". $ASDF_DIR/asdf.sh" >> /root/.profile
-
-ENV PATH="$ASDF_DIR/shims:$ASDF_DIR/bin:$PATH"
-
-# Install Erlang/OTP 25 and Elixir 1.15.4
-RUN asdf plugin add erlang https://github.com/asdf-vm/asdf-erlang.git \
-    && asdf plugin add elixir https://github.com/asdf-vm/asdf-elixir.git \
-    && KERL_BUILD_DOCS=no KERL_CONFIGURE_OPTIONS="--disable-debug --without-javac" \
-       asdf install erlang 25.3.2 \
-    && asdf install elixir 1.15.4-otp-25 \
-    && asdf global erlang 25.3.2 \
-    && asdf global elixir 1.15.4-otp-25
 
 # Install Hex and Rebar (Elixir package managers)
 RUN mix local.hex --force && mix local.rebar --force
